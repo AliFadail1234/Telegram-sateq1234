@@ -1,7 +1,6 @@
 import type { Context } from 'telegraf';
 import { Markup } from 'telegraf';
 import {
-  getAllUsers,
   getUsersCount,
   getChannelsCount,
   getTasksCount,

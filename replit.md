@@ -1,45 +1,80 @@
-# [Project name]
+# بوت تيليجرام لتبادل الاشتراكات بنظام النقاط
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+بوت تيليجرام يسمح للمستخدمين بكسب نقاط عبر الاشتراك في قنوات، واستخدام النقاط لترويج قنواتهم الخاصة.
 
-## Run & Operate
+## تشغيل المشروع
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/telegram-bot run dev` — تشغيل البوت (وضع التطوير مع إعادة التشغيل التلقائي)
+- `pnpm --filter @workspace/telegram-bot run start` — تشغيل البوت (إنتاج)
+- `pnpm --filter @workspace/telegram-bot run typecheck` — فحص الأنواع
 
-## Stack
+## متغيرات البيئة المطلوبة
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- `TELEGRAM_BOT_TOKEN` — توكن البوت من @BotFather (سر)
+- `ADMIN_ID` — معرّف أدمن البوت على تيليجرام
 
-## Where things live
+## البنية
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+```
+artifacts/telegram-bot/
+├── src/
+│   ├── index.ts            # نقطة الدخول
+│   ├── bot.ts              # إعداد البوت
+│   ├── db/
+│   │   ├── database.ts     # اتصال SQLite (node:sqlite)
+│   │   └── queries.ts      # جميع استعلامات قاعدة البيانات
+│   ├── handlers/
+│   │   ├── index.ts        # تسجيل جميع المعالجات
+│   │   ├── start.ts        # أمر /start والتسجيل التلقائي
+│   │   ├── balance.ts      # عرض الرصيد والإحصائيات
+│   │   ├── tasks.ts        # كسب النقاط والتحقق من الاشتراك
+│   │   ├── promote.ts      # ترويج القنوات (محادثة متعددة الخطوات)
+│   │   ├── account.ts      # عرض بيانات الحساب
+│   │   └── admin.ts        # لوحة الأدمن الكاملة
+│   └── utils/
+│       ├── keyboards.ts    # لوحات المفاتيح (inline keyboards)
+│       └── messages.ts     # قوالب الرسائل
+└── data/
+    └── bot.db              # قاعدة بيانات SQLite (تُنشأ تلقائياً)
+```
 
-## Architecture decisions
+## التقنيات
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **Runtime:** Node.js 24 (TypeScript via tsx)
+- **Bot Framework:** Telegraf v4
+- **Database:** SQLite عبر `node:sqlite` المدمجة (لا تثبيت مطلوب)
+- **Language:** TypeScript
 
-## Product
+## قاعدة البيانات
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+جداول SQLite:
+- `users` — المستخدمون المسجلون مع النقاط
+- `channels` — القنوات النشطة (مضافة من الأدمن أو المستخدمين)
+- `completed_tasks` — سجل الاشتراكات المكتملة (يمنع التكرار)
+
+## وظائف البوت
+
+### للمستخدمين
+- `/start` — التسجيل التلقائي والقائمة الرئيسية
+- **📊 رصيدي** — عرض النقاط والإحصائيات
+- **⭐ كسب نقاط** — مهام الاشتراك في القنوات
+- **📢 ترويج قناتي** — إنفاق النقاط على ترويج القناة
+- **👤 حسابي** — عرض بيانات الحساب
+
+### للأدمن
+- `/admin` — لوحة إدارة كاملة
+  - إدارة القنوات (إضافة/حذف/تعديل النقاط)
+  - إدارة المستخدمين (البحث، عرض البيانات)
+  - إحصائيات عامة
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- الواجهة كاملاً بالعربية
+- أولوية البساطة والاستقرار على الميزات الكثيرة
+- لا تضف ميزات غير مطلوبة
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- البوت يستخدم `node:sqlite` التجريبية في Node 24 — تظهر تحذير عند التشغيل لكنها تعمل بشكل صحيح
+- للتحقق من الاشتراك في القناة يجب أن تكون القناة عامة (public)
+- ملف قاعدة البيانات `data/bot.db` يُنشأ تلقائياً عند أول تشغيل

@@ -23,21 +23,44 @@ export interface Channel {
   created_at: string;
 }
 
-export interface CompletedTask {
-  id: number;
-  user_id: number;
-  channel_id: number;
-  completed_at: string;
+// ========== مساعد تحويل الأنواع ==========
+// node:sqlite يعيد bigint للأعداد الصحيحة — نحوّلها لـ number
+
+function toUser(row: Record<string, unknown>): User {
+  return {
+    id: Number(row['id']),
+    telegram_id: Number(row['telegram_id']),
+    username: row['username'] as string | null,
+    first_name: row['first_name'] as string,
+    last_name: row['last_name'] as string | null,
+    points: Number(row['points']),
+    created_at: row['created_at'] as string,
+  };
+}
+
+function toChannel(row: Record<string, unknown>): Channel {
+  return {
+    id: Number(row['id']),
+    channel_username: row['channel_username'] as string,
+    channel_name: row['channel_name'] as string,
+    points_reward: Number(row['points_reward']),
+    is_active: Number(row['is_active']),
+    added_by_type: row['added_by_type'] as string,
+    added_by_user_id: row['added_by_user_id'] != null ? Number(row['added_by_user_id']) : null,
+    created_at: row['created_at'] as string,
+  };
 }
 
 // ========== استعلامات المستخدمين ==========
 
 export function getUserByTelegramId(telegramId: number): User | undefined {
-  return db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(telegramId) as User | undefined;
+  const row = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(telegramId) as Record<string, unknown> | undefined;
+  return row ? toUser(row) : undefined;
 }
 
 export function getUserById(id: number): User | undefined {
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(id) as User | undefined;
+  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+  return row ? toUser(row) : undefined;
 }
 
 export function createUser(telegramId: number, firstName: string, lastName: string | null, username: string | null): User {
@@ -45,15 +68,13 @@ export function createUser(telegramId: number, firstName: string, lastName: stri
     INSERT INTO users (telegram_id, first_name, last_name, username)
     VALUES (?, ?, ?, ?)
   `);
-  const result = stmt.run(telegramId, firstName, lastName, username);
-  return getUserById(result.lastInsertRowid as number)!;
+  const result = stmt.run(telegramId, firstName, lastName ?? null, username ?? null) as { lastInsertRowid: number | bigint };
+  return getUserById(Number(result.lastInsertRowid))!;
 }
 
 export function getOrCreateUser(telegramId: number, firstName: string, lastName: string | null, username: string | null): { user: User; isNew: boolean } {
   const existing = getUserByTelegramId(telegramId);
-  if (existing) {
-    return { user: existing, isNew: false };
-  }
+  if (existing) return { user: existing, isNew: false };
   const newUser = createUser(telegramId, firstName, lastName, username);
   return { user: newUser, isNew: true };
 }
@@ -69,17 +90,14 @@ export function deductPoints(userId: number, points: number): boolean {
   return true;
 }
 
-export function getAllUsers(): User[] {
-  return db.prepare('SELECT * FROM users ORDER BY created_at DESC').all() as User[];
-}
-
 export function getUsersCount(): number {
-  const result = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
-  return result.count;
+  const row = db.prepare('SELECT COUNT(*) as count FROM users').get() as Record<string, unknown>;
+  return Number(row['count']);
 }
 
 export function searchUserByUsername(username: string): User | undefined {
-  return db.prepare('SELECT * FROM users WHERE username LIKE ?').get(`%${username}%`) as User | undefined;
+  const row = db.prepare('SELECT * FROM users WHERE username LIKE ?').get(`%${username}%`) as Record<string, unknown> | undefined;
+  return row ? toUser(row) : undefined;
 }
 
 export function searchUserByTelegramId(telegramId: number): User | undefined {
@@ -89,11 +107,13 @@ export function searchUserByTelegramId(telegramId: number): User | undefined {
 // ========== استعلامات القنوات ==========
 
 export function getActiveChannels(): Channel[] {
-  return db.prepare('SELECT * FROM channels WHERE is_active = 1 ORDER BY created_at DESC').all() as Channel[];
+  const rows = db.prepare('SELECT * FROM channels WHERE is_active = 1 ORDER BY created_at DESC').all() as Record<string, unknown>[];
+  return rows.map(toChannel);
 }
 
 export function getChannelById(id: number): Channel | undefined {
-  return db.prepare('SELECT * FROM channels WHERE id = ?').get(id) as Channel | undefined;
+  const row = db.prepare('SELECT * FROM channels WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+  return row ? toChannel(row) : undefined;
 }
 
 export function createChannel(channelUsername: string, channelName: string, pointsReward: number, addedByType: 'admin' | 'user', addedByUserId: number | null): Channel {
@@ -101,8 +121,8 @@ export function createChannel(channelUsername: string, channelName: string, poin
     INSERT INTO channels (channel_username, channel_name, points_reward, added_by_type, added_by_user_id)
     VALUES (?, ?, ?, ?, ?)
   `);
-  const result = stmt.run(channelUsername, channelName, pointsReward, addedByType, addedByUserId);
-  return getChannelById(result.lastInsertRowid as number)!;
+  const result = stmt.run(channelUsername, channelName, pointsReward, addedByType, addedByUserId ?? null) as { lastInsertRowid: number | bigint };
+  return getChannelById(Number(result.lastInsertRowid))!;
 }
 
 export function deleteChannel(id: number): void {
@@ -114,8 +134,8 @@ export function updateChannelPoints(id: number, points: number): void {
 }
 
 export function getChannelsCount(): number {
-  const result = db.prepare('SELECT COUNT(*) as count FROM channels WHERE is_active = 1').get() as { count: number };
-  return result.count;
+  const row = db.prepare('SELECT COUNT(*) as count FROM channels WHERE is_active = 1').get() as Record<string, unknown>;
+  return Number(row['count']);
 }
 
 // ========== استعلامات المهام ==========
@@ -130,28 +150,27 @@ export function completeTask(userId: number, channelId: number): boolean {
     db.prepare('INSERT INTO completed_tasks (user_id, channel_id) VALUES (?, ?)').run(userId, channelId);
     return true;
   } catch {
-    return false; // المهمة مكتملة مسبقاً (UNIQUE constraint)
+    return false;
   }
 }
 
 export function getUserCompletedTasksCount(userId: number): number {
-  const result = db.prepare('SELECT COUNT(*) as count FROM completed_tasks WHERE user_id = ?').get(userId) as { count: number };
-  return result.count;
+  const row = db.prepare('SELECT COUNT(*) as count FROM completed_tasks WHERE user_id = ?').get(userId) as Record<string, unknown>;
+  return Number(row['count']);
 }
 
 export function getTasksCount(): number {
-  const result = db.prepare('SELECT COUNT(*) as count FROM completed_tasks').get() as { count: number };
-  return result.count;
+  const row = db.prepare('SELECT COUNT(*) as count FROM completed_tasks').get() as Record<string, unknown>;
+  return Number(row['count']);
 }
 
 export function getTotalPointsCirculated(): number {
-  const result = db.prepare('SELECT SUM(points_reward) as total FROM channels').get() as { total: number | null };
-  return result.total ?? 0;
+  const row = db.prepare('SELECT SUM(points_reward) as total FROM channels').get() as Record<string, unknown>;
+  return Number(row['total'] ?? 0);
 }
 
-// الحصول على القناة التالية غير المكتملة للمستخدم
 export function getNextPendingChannel(userId: number): Channel | undefined {
-  return db.prepare(`
+  const row = db.prepare(`
     SELECT c.* FROM channels c
     WHERE c.is_active = 1
     AND c.id NOT IN (
@@ -159,14 +178,14 @@ export function getNextPendingChannel(userId: number): Channel | undefined {
     )
     ORDER BY c.created_at ASC
     LIMIT 1
-  `).get(userId) as Channel | undefined;
+  `).get(userId) as Record<string, unknown> | undefined;
+  return row ? toChannel(row) : undefined;
 }
 
-// عدد القنوات التي روّج لها المستخدم
 export function getUserPromotedChannelsCount(userId: number): number {
-  const result = db.prepare(`
+  const row = db.prepare(`
     SELECT COUNT(*) as count FROM channels
     WHERE added_by_type = 'user' AND added_by_user_id = ?
-  `).get(userId) as { count: number };
-  return result.count;
+  `).get(userId) as Record<string, unknown>;
+  return Number(row['count']);
 }
