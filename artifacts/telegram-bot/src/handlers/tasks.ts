@@ -14,24 +14,37 @@ import {
   taskCompletedMessage,
   notSubscribedMessage,
 } from '../utils/messages.js';
+import { showEarnMenu } from '../utils/earn_menu.js';
 
+// عرض قائمة كسب النقاط الرئيسية
 export async function handleTasks(ctx: Context): Promise<void> {
+  await showEarnMenu(ctx, false);
+}
+
+// عرض مهام الاشتراك في القنوات
+export async function handleEarnTasks(ctx: Context): Promise<void> {
   const from = ctx.from;
   if (!from) return;
 
   const user = getUserByTelegramId(from.id);
   if (!user) {
-    await ctx.reply('⚠️ لم يتم العثور على حسابك. أرسل /start للتسجيل.');
+    await ctx.answerCbQuery('⚠️ لم يتم العثور على حسابك.');
     return;
   }
+
+  await ctx.answerCbQuery();
 
   const channel = getNextPendingChannel(user.id);
   if (!channel) {
-    await ctx.reply(noTasksMessage());
+    await ctx.editMessageText(noTasksMessage(), {
+      reply_markup: {
+        inline_keyboard: [[{ text: '🔙 رجوع', callback_data: 'earn_menu' }]],
+      },
+    });
     return;
   }
 
-  await ctx.reply(taskMessage(channel), subscribeCheckKeyboard(channel.channel_username, channel.id));
+  await ctx.editMessageText(taskMessage(channel), subscribeCheckKeyboard(channel.channel_username, channel.id));
 }
 
 export async function handleCheckSubscription(ctx: Context, channelId: number): Promise<void> {
@@ -44,13 +57,11 @@ export async function handleCheckSubscription(ctx: Context, channelId: number): 
     return;
   }
 
-  // التحقق من أن المهمة لم تُكتمل مسبقاً
   if (hasCompletedTask(user.id, channelId)) {
     await ctx.answerCbQuery('✅ لقد أكملت هذه المهمة مسبقاً!');
     return;
   }
 
-  // جلب بيانات القناة
   const { getChannelById } = await import('../db/queries.js');
   const channel = getChannelById(channelId);
   if (!channel || !channel.is_active) {
@@ -58,7 +69,6 @@ export async function handleCheckSubscription(ctx: Context, channelId: number): 
     return;
   }
 
-  // التحقق من الاشتراك عبر Telegram API
   const username = channel.channel_username.startsWith('@')
     ? channel.channel_username
     : `@${channel.channel_username}`;
@@ -77,7 +87,6 @@ export async function handleCheckSubscription(ctx: Context, channelId: number): 
     return;
   }
 
-  // تسجيل المهمة وإضافة النقاط
   const taskRecorded = completeTask(user.id, channelId);
   if (!taskRecorded) {
     await ctx.answerCbQuery('✅ لقد أكملت هذه المهمة مسبقاً!');
@@ -90,6 +99,11 @@ export async function handleCheckSubscription(ctx: Context, channelId: number): 
   await ctx.answerCbQuery('✅ تم تسجيل اشتراكك!');
   await ctx.editMessageText(
     taskCompletedMessage(channel.channel_name, channel.points_reward, updatedUser.points),
+    {
+      reply_markup: {
+        inline_keyboard: [[{ text: '🔙 رجوع لكسب النقاط', callback_data: 'earn_menu' }]],
+      },
+    },
   );
 
   // عرض المهمة التالية تلقائياً
@@ -99,7 +113,5 @@ export async function handleCheckSubscription(ctx: Context, channelId: number): 
       `⭐ مهمة أخرى متاحة!\n\n${taskMessage(nextChannel)}`,
       subscribeCheckKeyboard(nextChannel.channel_username, nextChannel.id),
     );
-  } else {
-    await ctx.reply(noTasksMessage());
   }
 }

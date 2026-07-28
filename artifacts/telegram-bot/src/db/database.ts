@@ -46,5 +46,15 @@ export function initDatabase(): void {
       FOREIGN KEY (channel_id) REFERENCES channels(id),
       UNIQUE(user_id, channel_id)
     );
+
+    CREATE TABLE IF NOT EXISTS daily_claims (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      claimed_date TEXT NOT NULL,
+      points_earned INTEGER NOT NULL DEFAULT 5,
+      claimed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE(user_id, claimed_date)
+    );
   `);
 }

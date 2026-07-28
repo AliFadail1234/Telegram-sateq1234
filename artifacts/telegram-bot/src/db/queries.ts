@@ -189,3 +189,39 @@ export function getUserPromotedChannelsCount(userId: number): number {
   `).get(userId) as Record<string, unknown>;
   return Number(row['count']);
 }
+
+// ========== استعلامات المكافأة اليومية ==========
+
+export interface DailyClaimStatus {
+  canClaim: boolean;
+  lastClaimDate: string | null;
+}
+
+function getTodayUTC(): string {
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+export function getDailyClaimStatus(userId: number): DailyClaimStatus {
+  const today = getTodayUTC();
+  const row = db.prepare(
+    'SELECT claimed_date FROM daily_claims WHERE user_id = ? AND claimed_date = ?'
+  ).get(userId, today) as Record<string, unknown> | undefined;
+
+  return {
+    canClaim: !row,
+    lastClaimDate: row ? (row['claimed_date'] as string) : null,
+  };
+}
+
+export function claimDailyBonus(userId: number, points: number): { success: boolean } {
+  const today = getTodayUTC();
+  try {
+    db.prepare(
+      'INSERT INTO daily_claims (user_id, claimed_date, points_earned) VALUES (?, ?, ?)'
+    ).run(userId, today, points);
+    addPoints(userId, points);
+    return { success: true };
+  } catch {
+    return { success: false }; // سبق الاستلام (UNIQUE constraint)
+  }
+}

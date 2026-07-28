@@ -2,7 +2,8 @@ import type { Telegraf, Context } from 'telegraf';
 import { handleStart } from './start.js';
 import { handleBalance } from './balance.js';
 import { handleAccount } from './account.js';
-import { handleTasks, handleCheckSubscription } from './tasks.js';
+import { handleTasks, handleEarnTasks, handleCheckSubscription } from './tasks.js';
+import { handleDailyBonus } from './daily.js';
 import {
   handlePromote,
   handlePromoteChannelInput,
@@ -18,6 +19,7 @@ import {
 } from './admin.js';
 import { getUserByTelegramId } from '../db/queries.js';
 import { mainMenuKeyboard } from '../utils/keyboards.js';
+import { showEarnMenu } from '../utils/earn_menu.js';
 
 export function setupHandlers(bot: Telegraf): void {
 
@@ -55,6 +57,25 @@ export function setupHandlers(bot: Telegraf): void {
     // لوحة الأدمن
     if (data.startsWith('admin_')) {
       await handleAdminCallback(ctx, data);
+      return;
+    }
+
+    // المكافأة اليومية
+    if (data === 'daily_bonus') {
+      await handleDailyBonus(ctx);
+      return;
+    }
+
+    // قائمة كسب النقاط (رجوع)
+    if (data === 'earn_menu') {
+      await ctx.answerCbQuery();
+      await showEarnMenu(ctx, true);
+      return;
+    }
+
+    // مهام الاشتراك في القنوات
+    if (data === 'earn_tasks') {
+      await handleEarnTasks(ctx);
       return;
     }
 
