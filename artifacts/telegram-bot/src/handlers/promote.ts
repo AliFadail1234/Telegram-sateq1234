@@ -1,22 +1,30 @@
 import type { Context } from 'telegraf';
 import {
   getUserByTelegramId,
-  createChannel,
-  deductPoints,
   getUserById,
+  deductPoints,
+  createCampaign,
 } from '../db/queries.js';
 import {
   promoteAskChannelMessage,
-  promoteAskPointsMessage,
+  promoteChannelNotFoundMessage,
+  promoteBotNotAdminMessage,
+  promoteChooseSubscribersMessage,
+  promoteConfirmMessage,
   promoteSuccessMessage,
   insufficientPointsMessage,
 } from '../utils/messages.js';
-import { mainMenuKeyboard } from '../utils/keyboards.js';
+import {
+  subscriberChoiceKeyboard,
+  campaignConfirmKeyboard,
+  mainMenuKeyboard,
+} from '../utils/keyboards.js';
 
-// حالات المحادثة في الذاكرة
+// ===== حالات المحادثة =====
+
 type PromoteState =
   | { step: 'waiting_channel' }
-  | { step: 'waiting_points'; channelUsername: string };
+  | { step: 'choosing_subscribers'; channelUsername: string; channelName: string };
 
 const promoteStates = new Map<number, PromoteState>();
 
@@ -28,13 +36,15 @@ export function clearPromoteState(telegramId: number): void {
   promoteStates.delete(telegramId);
 }
 
+// ===== بدء الترويج =====
+
 export async function handlePromote(ctx: Context): Promise<void> {
   const from = ctx.from;
   if (!from) return;
 
   const user = getUserByTelegramId(from.id);
   if (!user) {
-    await ctx.reply('⚠️ لم يتم العثور على حسابك. أرسل /start للتسجيل.');
+    await ctx.reply('⚠️ أرسل /start للتسجيل أولاً.');
     return;
   }
 
@@ -42,58 +52,137 @@ export async function handlePromote(ctx: Context): Promise<void> {
   await ctx.reply(promoteAskChannelMessage(user.points));
 }
 
-export async function handlePromoteChannelInput(ctx: Context, channelUsername: string): Promise<void> {
+// ===== استقبال معرّف القناة والتحقق منها =====
+
+export async function handlePromoteChannelInput(ctx: Context, rawInput: string): Promise<void> {
   const from = ctx.from;
   if (!from) return;
 
   const user = getUserByTelegramId(from.id);
   if (!user) return;
 
-  // تنظيف المعرّف
-  const cleanUsername = channelUsername.startsWith('@') ? channelUsername : `@${channelUsername}`;
+  // تنظيف الرابط أو المعرّف
+  let username = rawInput.trim();
+  if (username.startsWith('https://t.me/')) username = username.replace('https://t.me/', '');
+  if (username.startsWith('t.me/')) username = username.replace('t.me/', '');
+  username = username.replace(/^@/, '').split('/')[0].trim();
 
-  promoteStates.set(from.id, { step: 'waiting_points', channelUsername: cleanUsername });
-  await ctx.reply(promoteAskPointsMessage(cleanUsername));
+  if (!username || !/^[a-zA-Z0-9_]{5,}$/.test(username)) {
+    await ctx.reply('⚠️ معرّف غير صحيح. يجب أن يكون 5 أحرف على الأقل.\n\nمثال: @mychannel\n\nأو /cancel للإلغاء.');
+    return;
+  }
+
+  const channelTag = `@${username}`;
+
+  // التحقق من وجود القناة وأن البوت مشرف فيها
+  const verifyMsg = await ctx.reply(`🔍 جاري التحقق من القناة ${channelTag}...`);
+
+  let channelName = channelTag;
+
+  try {
+    // جلب معلومات البوت
+    const botInfo = await ctx.telegram.getMe();
+
+    // التحقق من أن البوت مشرف
+    const botMember = await ctx.telegram.getChatMember(channelTag, botInfo.id);
+    if (!['administrator', 'creator'].includes(botMember.status)) {
+      await ctx.telegram.deleteMessage(from.id, verifyMsg.message_id).catch(() => null);
+      await ctx.reply(promoteBotNotAdminMessage());
+      return;
+    }
+
+    // جلب اسم القناة
+    try {
+      const chat = await ctx.telegram.getChat(channelTag);
+      channelName = ('title' in chat && chat.title) ? chat.title : channelTag;
+    } catch {
+      channelName = channelTag;
+    }
+  } catch {
+    await ctx.telegram.deleteMessage(from.id, verifyMsg.message_id).catch(() => null);
+    await ctx.reply(promoteChannelNotFoundMessage());
+    return;
+  }
+
+  await ctx.telegram.deleteMessage(from.id, verifyMsg.message_id).catch(() => null);
+
+  // التحقق من النقاط
+  const keyboard = subscriberChoiceKeyboard(user.points);
+  if (!keyboard) {
+    await ctx.reply(insufficientPointsMessage(user.points, 10));
+    clearPromoteState(from.id);
+    return;
+  }
+
+  promoteStates.set(from.id, { step: 'choosing_subscribers', channelUsername: channelTag, channelName });
+  await ctx.reply(promoteChooseSubscribersMessage(channelName, channelTag, user.points), keyboard);
 }
 
-export async function handlePromotePointsInput(ctx: Context, channelUsername: string, pointsText: string): Promise<void> {
+// ===== اختيار عدد المشتركين (callback) =====
+
+export async function handlePromoteChoose(ctx: Context, targetSubs: number, cost: number): Promise<void> {
   const from = ctx.from;
   if (!from) return;
+
+  const state = promoteStates.get(from.id);
+  if (!state || state.step !== 'choosing_subscribers') {
+    await ctx.answerCbQuery('⚠️ انتهت الجلسة. ابدأ من جديد.');
+    return;
+  }
 
   const user = getUserByTelegramId(from.id);
   if (!user) return;
 
-  const points = parseInt(pointsText, 10);
-
-  // التحقق من صحة الرقم
-  if (isNaN(points) || points < 10) {
-    await ctx.reply('⚠️ الحد الأدنى هو 10 نقاط. أدخل رقماً صحيحاً (10 أو أكثر):');
+  if (user.points < cost) {
+    await ctx.answerCbQuery('❌ نقاطك غير كافية!', { show_alert: true });
     return;
   }
 
-  // التحقق من كفاية النقاط
-  if (user.points < points) {
-    clearPromoteState(from.id);
-    await ctx.reply(insufficientPointsMessage(user.points, points), mainMenuKeyboard);
+  await ctx.answerCbQuery();
+  await ctx.editMessageText(
+    promoteConfirmMessage(state.channelName, state.channelUsername, targetSubs, cost, user.points),
+    { reply_markup: campaignConfirmKeyboard(state.channelUsername, targetSubs, cost).reply_markup },
+  );
+}
+
+// ===== تأكيد الحملة (callback) =====
+
+export async function handlePromoteConfirm(ctx: Context, targetSubs: number, cost: number, channelUsername: string): Promise<void> {
+  const from = ctx.from;
+  if (!from) return;
+
+  const state = promoteStates.get(from.id);
+  if (!state || state.step !== 'choosing_subscribers') {
+    await ctx.answerCbQuery('⚠️ انتهت الجلسة. ابدأ من جديد.');
     return;
   }
 
-  // خصم النقاط وإنشاء القناة
-  const deducted = deductPoints(user.id, points);
+  const user = getUserByTelegramId(from.id);
+  if (!user) return;
+
+  const deducted = deductPoints(user.id, cost);
   if (!deducted) {
+    await ctx.answerCbQuery('❌ نقاطك غير كافية!', { show_alert: true });
     clearPromoteState(from.id);
-    await ctx.reply(insufficientPointsMessage(user.points, points), mainMenuKeyboard);
     return;
   }
 
-  const cleanUsername = channelUsername.startsWith('@') ? channelUsername.slice(1) : channelUsername;
-  createChannel(cleanUsername, channelUsername, points, 'user', user.id);
+  const clean = channelUsername.startsWith('@') ? channelUsername.slice(1) : channelUsername;
+  createCampaign(user.id, clean, state.channelName, targetSubs, cost);
 
   clearPromoteState(from.id);
 
   const updatedUser = getUserById(user.id)!;
-  await ctx.reply(
-    promoteSuccessMessage(channelUsername, points, updatedUser.points),
-    mainMenuKeyboard,
-  );
+  await ctx.answerCbQuery('✅ تم إنشاء الحملة!');
+  await ctx.editMessageText(promoteSuccessMessage(state.channelName, targetSubs, cost, updatedUser.points));
+}
+
+// ===== إلغاء =====
+
+export async function handlePromoteCancel(ctx: Context): Promise<void> {
+  const from = ctx.from;
+  if (!from) return;
+  clearPromoteState(from.id);
+  await ctx.answerCbQuery();
+  await ctx.editMessageText('🚫 تم إلغاء إنشاء الحملة.');
 }

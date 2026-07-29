@@ -1,5 +1,5 @@
 import type { Context } from 'telegraf';
-import { getUserByTelegramId, getUserCompletedTasksCount, getUserPromotedChannelsCount } from '../db/queries.js';
+import { getUserByTelegramId, getUserCompletedTasksCount, getUserCampaignsCount } from '../db/queries.js';
 import { balanceMessage } from '../utils/messages.js';
 
 export async function handleBalance(ctx: Context): Promise<void> {
@@ -13,7 +13,7 @@ export async function handleBalance(ctx: Context): Promise<void> {
   }
 
   const completedTasks = getUserCompletedTasksCount(user.id);
-  const promotedChannels = getUserPromotedChannelsCount(user.id);
+  const campaigns = getUserCampaignsCount(user.id);
 
-  await ctx.reply(balanceMessage(user, completedTasks, promotedChannels));
+  await ctx.reply(balanceMessage(user, completedTasks, campaigns));
 }
