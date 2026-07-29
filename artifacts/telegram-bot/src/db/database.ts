@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '../../../data/bot.db');
+const DB_DIR = process.env.DATA_DIR ?? path.join(__dirname, '../../../data');
+const DB_PATH = path.join(DB_DIR, 'bot.db');
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
