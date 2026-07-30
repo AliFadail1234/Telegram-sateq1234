@@ -3,7 +3,7 @@ import type { Context } from 'telegraf';
 import { handleStart } from './start.js';
 import { handleBalance } from './balance.js';
 import { handleAccount } from './account.js';
-import { handleTasks, handleEarnTasks, handleCheckChannel, handleCheckCampaign } from './tasks.js';
+import { handleTasks, handleEarnTasks, handleCheckChannel, handleCheckCampaign, handleSkipChannel, handleSkipCampaign } from './tasks.js';
 import { handleDailyBonus } from './daily.js';
 import {
   handlePromote,
@@ -61,6 +61,20 @@ export function setupHandlers(bot: Telegraf): void {
     if (data.startsWith('check_campaign_')) {
       const id = parseInt(data.replace('check_campaign_', ''), 10);
       await handleCheckCampaign(ctx, id);
+      return;
+    }
+
+    // تخطي مهمة قناة
+    if (data.startsWith('skip_channel_')) {
+      const id = parseInt(data.replace('skip_channel_', ''), 10);
+      await handleSkipChannel(ctx, id);
+      return;
+    }
+
+    // تخطي مهمة حملة
+    if (data.startsWith('skip_campaign_')) {
+      const id = parseInt(data.replace('skip_campaign_', ''), 10);
+      await handleSkipCampaign(ctx, id);
       return;
     }
 

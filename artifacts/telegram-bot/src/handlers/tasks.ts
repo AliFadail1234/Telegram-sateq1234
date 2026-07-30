@@ -23,6 +23,25 @@ import {
 import { showEarnMenu } from '../utils/earn_menu.js';
 import { POINTS_PER_CAMPAIGN_SUBSCRIPTION } from '../config/pricing.js';
 
+// ========== تتبع المهام المتخطاة لكل مستخدم ==========
+const skippedChannels = new Map<number, Set<number>>();
+const skippedCampaigns = new Map<number, Set<number>>();
+
+function getSkippedChannels(telegramId: number): Set<number> {
+  if (!skippedChannels.has(telegramId)) skippedChannels.set(telegramId, new Set());
+  return skippedChannels.get(telegramId)!;
+}
+
+function getSkippedCampaigns(telegramId: number): Set<number> {
+  if (!skippedCampaigns.has(telegramId)) skippedCampaigns.set(telegramId, new Set());
+  return skippedCampaigns.get(telegramId)!;
+}
+
+export function clearSkipState(telegramId: number): void {
+  skippedChannels.delete(telegramId);
+  skippedCampaigns.delete(telegramId);
+}
+
 export async function handleTasks(ctx: Context): Promise<void> {
   await showEarnMenu(ctx, false);
 }
@@ -35,6 +54,9 @@ export async function handleEarnTasks(ctx: Context): Promise<void> {
   if (!user) { await ctx.answerCbQuery('⚠️ أرسل /start أولاً.'); return; }
 
   await ctx.answerCbQuery();
+
+  // إعادة ضبط المتخطيات عند بدء جلسة جديدة للمهام
+  clearSkipState(from.id);
 
   const channel = await getNextPendingChannel(user.id);
   if (channel) {
@@ -56,6 +78,75 @@ export async function handleEarnTasks(ctx: Context): Promise<void> {
 
   await ctx.editMessageText(noTasksMessage(), {
     reply_markup: { inline_keyboard: [[{ text: '🔙 رجوع', callback_data: 'earn_menu' }]] },
+  });
+}
+
+export async function handleSkipChannel(ctx: Context, channelId: number): Promise<void> {
+  const from = ctx.from;
+  if (!from) return;
+
+  const user = await getUserByTelegramId(from.id);
+  if (!user) { await ctx.answerCbQuery('⚠️ أرسل /start أولاً.'); return; }
+
+  await ctx.answerCbQuery('⏭️ تم تخطي المهمة');
+
+  // إضافة القناة الحالية لقائمة المتخطيات
+  getSkippedChannels(from.id).add(channelId);
+
+  const excludedChannels = [...getSkippedChannels(from.id)];
+  const excludedCampaigns = [...getSkippedCampaigns(from.id)];
+
+  // البحث عن قناة أخرى
+  const nextChannel = await getNextPendingChannel(user.id, excludedChannels);
+  if (nextChannel) {
+    await ctx.editMessageText(
+      channelTaskMessage(nextChannel),
+      { reply_markup: channelTaskKeyboard(nextChannel.channel_username, nextChannel.id, 'channel').reply_markup },
+    );
+    return;
+  }
+
+  // البحث عن حملة
+  const nextCampaign = await getNextPendingCampaign(user.id, excludedCampaigns);
+  if (nextCampaign) {
+    await ctx.editMessageText(
+      campaignTaskMessage(nextCampaign),
+      { reply_markup: channelTaskKeyboard(nextCampaign.channel_username, nextCampaign.id, 'campaign').reply_markup },
+    );
+    return;
+  }
+
+  await ctx.editMessageText('⏭️ لا توجد مهام أخرى متاحة.\n\nيمكنك العودة لاحقاً أو استلام مكافأتك اليومية.', {
+    reply_markup: { inline_keyboard: [[{ text: '🔙 رجوع للقائمة', callback_data: 'earn_menu' }]] },
+  });
+}
+
+export async function handleSkipCampaign(ctx: Context, campaignId: number): Promise<void> {
+  const from = ctx.from;
+  if (!from) return;
+
+  const user = await getUserByTelegramId(from.id);
+  if (!user) { await ctx.answerCbQuery('⚠️ أرسل /start أولاً.'); return; }
+
+  await ctx.answerCbQuery('⏭️ تم تخطي المهمة');
+
+  // إضافة الحملة الحالية لقائمة المتخطيات
+  getSkippedCampaigns(from.id).add(campaignId);
+
+  const excludedCampaigns = [...getSkippedCampaigns(from.id)];
+
+  // البحث عن حملة أخرى
+  const nextCampaign = await getNextPendingCampaign(user.id, excludedCampaigns);
+  if (nextCampaign) {
+    await ctx.editMessageText(
+      campaignTaskMessage(nextCampaign),
+      { reply_markup: channelTaskKeyboard(nextCampaign.channel_username, nextCampaign.id, 'campaign').reply_markup },
+    );
+    return;
+  }
+
+  await ctx.editMessageText('⏭️ لا توجد مهام أخرى متاحة.\n\nيمكنك العودة لاحقاً أو استلام مكافأتك اليومية.', {
+    reply_markup: { inline_keyboard: [[{ text: '🔙 رجوع للقائمة', callback_data: 'earn_menu' }]] },
   });
 }
 

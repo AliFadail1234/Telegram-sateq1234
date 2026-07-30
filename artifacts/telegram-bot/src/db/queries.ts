@@ -204,13 +204,20 @@ export async function getUserCompletedTasksCount(userId: number): Promise<number
   return Number(rows[0].c);
 }
 
-export async function getNextPendingChannel(userId: number): Promise<Channel | undefined> {
+export async function getNextPendingChannel(userId: number, excludeIds: number[] = []): Promise<Channel | undefined> {
+  const excluded = [
+    ...excludeIds,
+  ];
+  const placeholders = excluded.length
+    ? `AND c.id NOT IN (${excluded.map((_, i) => `$${i + 2}`).join(', ')})`
+    : '';
   const { rows } = await pool.query(`
     SELECT c.* FROM channels c
     WHERE c.is_active = 1
       AND c.id NOT IN (SELECT channel_id FROM completed_tasks WHERE user_id = $1)
+      ${placeholders}
     ORDER BY c.created_at ASC LIMIT 1
-  `, [userId]);
+  `, [userId, ...excluded]);
   return rows[0] ? toChannel(rows[0]) : undefined;
 }
 
@@ -235,14 +242,18 @@ export async function createCampaign(
   return toCampaign(rows[0]);
 }
 
-export async function getNextPendingCampaign(userId: number): Promise<Campaign | undefined> {
+export async function getNextPendingCampaign(userId: number, excludeIds: number[] = []): Promise<Campaign | undefined> {
+  const placeholders = excludeIds.length
+    ? `AND id NOT IN (${excludeIds.map((_, i) => `$${i + 2}`).join(', ')})`
+    : '';
   const { rows } = await pool.query(`
     SELECT * FROM campaigns
     WHERE status = 'active'
       AND user_id != $1
       AND id NOT IN (SELECT campaign_id FROM campaign_subscriptions WHERE user_id = $1)
+      ${placeholders}
     ORDER BY created_at ASC LIMIT 1
-  `, [userId]);
+  `, [userId, ...excludeIds]);
   return rows[0] ? toCampaign(rows[0]) : undefined;
 }
 

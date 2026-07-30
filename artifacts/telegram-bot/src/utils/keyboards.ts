@@ -44,9 +44,11 @@ export const adminBackKeyboard = Markup.inlineKeyboard([
 export function channelTaskKeyboard(channelUsername: string, itemId: number, itemType: 'channel' | 'campaign') {
   const username = channelUsername.startsWith('@') ? channelUsername.slice(1) : channelUsername;
   const checkData = itemType === 'channel' ? `check_channel_${itemId}` : `check_campaign_${itemId}`;
+  const skipData = itemType === 'channel' ? `skip_channel_${itemId}` : `skip_campaign_${itemId}`;
   return Markup.inlineKeyboard([
     [Markup.button.url('📢 اشترك في القناة', `https://t.me/${username}`)],
     [Markup.button.callback('✅ تحقق من الاشتراك', checkData)],
+    [Markup.button.callback('⏭️ تخطي هذه المهمة', skipData), Markup.button.callback('🔙 رجوع', 'earn_menu')],
   ]);
 }
 
