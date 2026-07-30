@@ -141,14 +141,14 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
 
   if (apiPath === '/channels' && method === 'POST') {
     const body = await readBody(req);
-    const username = String(body['username'] ?? '').replace(/^@/, '').trim();
-    const name = String(body['name'] ?? '').trim();
+    const username = String(body['username'] ?? '').replace(/^@/, '').replace(/^https?:\/\/t\.me\//i, '').trim();
     const points = parseInt(String(body['points'] ?? '0'), 10);
-    if (!username || !name || isNaN(points) || points < 1) {
-      json(res, 400, { error: 'بيانات القناة غير مكتملة' });
+    if (!username || isNaN(points) || points < 1) {
+      json(res, 400, { error: 'أدخل معرّف القناة والنقاط' });
       return true;
     }
-    const channel = createChannel(username, name, points);
+    // استخدام المعرّف كاسم تلقائياً
+    const channel = createChannel(username, username, points);
     json(res, 201, channel);
     return true;
   }
