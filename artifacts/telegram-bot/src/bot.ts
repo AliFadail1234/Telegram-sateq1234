@@ -1,3 +1,7 @@
+import dns from 'dns';
+// إجبار Node.js على استخدام IPv4 أولاً (Render لا يدعم IPv6)
+dns.setDefaultResultOrder('ipv4first');
+
 import { Telegraf } from 'telegraf';
 import { initDatabase } from './db/database.js';
 import { setupHandlers } from './handlers/index.js';
