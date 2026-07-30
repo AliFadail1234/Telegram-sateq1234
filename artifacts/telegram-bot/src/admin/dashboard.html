@@ -149,10 +149,44 @@
   }
   .toast.show { opacity: 1; }
 
+  /* ===== جداول قابلة للتمرير ===== */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 500px; }
+
+  /* ===== موبايل ===== */
   @media (max-width: 700px) {
-    .form-row { grid-template-columns: 1fr 1fr; }
     .stats-grid { grid-template-columns: 1fr 1fr; }
-    .content { padding: 14px; }
+    .content { padding: 12px; }
+
+    /* شريط العنوان */
+    .topbar { padding: 10px 14px; gap: 8px; }
+    .topbar-title { font-size: 14px; }
+    .logout-btn { padding: 5px 10px; font-size: 12px; white-space: nowrap; }
+
+    /* شريط التنقل */
+    .nav { padding: 0 8px; }
+    .nav-btn { padding: 10px 12px; font-size: 13px; }
+
+    /* نموذج الإضافة */
+    .form-row { grid-template-columns: 1fr; }
+    .add-form { padding: 14px; }
+
+    /* بحث */
+    .search-bar { width: 100%; }
+    .section-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .section-header h3 { font-size: 14px; }
+
+    /* صندوق تسجيل الدخول */
+    .login-box { width: calc(100% - 32px); padding: 28px 20px; }
+
+    /* الأزرار داخل الجدول */
+    .btn { padding: 5px 10px; font-size: 12px; }
+    .btn-add { padding: 7px 12px; font-size: 13px; }
+  }
+
+  @media (max-width: 400px) {
+    .stats-grid { grid-template-columns: 1fr; }
+    .topbar-title { font-size: 13px; }
   }
 </style>
 </head>
@@ -331,20 +365,22 @@ async function loadChannels() {
   const channels = await r.json();
   const el = document.getElementById('channels-body');
   if (!channels.length) { el.innerHTML = '<div class="empty">لا توجد قنوات بعد</div>'; return; }
-  el.innerHTML = `<table>
+  el.innerHTML = `<div class="table-wrap"><table>
     <tr><th>#</th><th>المعرّف</th><th>الاسم</th><th>النقاط</th><th>إجراءات</th></tr>
     ${channels.map(c => `<tr>
       <td>${c.id}</td>
       <td>@${c.channel_username}</td>
       <td>${c.channel_name}</td>
       <td><span id="pts-${c.id}">${c.points_reward}</span></td>
-      <td style="display:flex;gap:6px;align-items:center">
-        <input type="number" id="edit-pts-${c.id}" style="width:65px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:13px" value="${c.points_reward}">
-        <button class="btn btn-blue" onclick="editChannelPoints(${c.id})">تعديل</button>
-        <button class="btn btn-red" onclick="delChannel(${c.id})">حذف</button>
+      <td>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input type="number" id="edit-pts-${c.id}" style="width:65px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:13px" value="${c.points_reward}">
+          <button class="btn btn-blue" onclick="editChannelPoints(${c.id})">تعديل</button>
+          <button class="btn btn-red" onclick="delChannel(${c.id})">حذف</button>
+        </div>
       </td>
     </tr>`).join('')}
-  </table>`;
+  </table></div>`;
 }
 
 async function addChannel() {
@@ -385,7 +421,7 @@ async function loadCampaigns() {
 function renderCampaigns(elId, campaigns, showActions) {
   const el = document.getElementById(elId);
   if (!campaigns.length) { el.innerHTML = '<div class="empty">لا توجد حملات</div>'; return; }
-  el.innerHTML = `<table>
+  el.innerHTML = `<div class="table-wrap"><table>
     <tr><th>#</th><th>القناة</th><th>المستهدف</th><th>المكتمل</th><th>النقاط المدفوعة</th><th>الحالة</th>${showActions ? '<th>إجراءات</th>' : ''}</tr>
     ${campaigns.map(c => `<tr>
       <td>${c.id}</td>
@@ -394,12 +430,14 @@ function renderCampaigns(elId, campaigns, showActions) {
       <td>${c.completed_subscribers}</td>
       <td>${c.points_paid}</td>
       <td><span class="badge ${c.status==='active'?'badge-green':c.status==='completed'?'badge-yellow':'badge-red'}">${c.status==='active'?'نشطة':c.status==='completed'?'مكتملة':'موقوفة'}</span></td>
-      ${showActions ? `<td style="display:flex;gap:6px">
-        ${c.status==='active'?`<button class="btn btn-yellow" style="background:rgba(245,158,11,.15);color:var(--yellow)" onclick="stopCamp(${c.id})">إيقاف</button>`:''}
-        <button class="btn btn-red" onclick="delCamp(${c.id})">حذف</button>
+      ${showActions ? `<td>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${c.status==='active'?`<button class="btn btn-yellow" style="background:rgba(245,158,11,.15);color:var(--yellow)" onclick="stopCamp(${c.id})">إيقاف</button>`:''}
+          <button class="btn btn-red" onclick="delCamp(${c.id})">حذف</button>
+        </div>
       </td>` : ''}
     </tr>`).join('')}
-  </table>`;
+  </table></div>`;
 }
 
 async function stopCamp(id) {
@@ -426,7 +464,7 @@ async function loadUsers() {
 function renderUsers(users) {
   const el = document.getElementById('users-body');
   if (!users.length) { el.innerHTML = '<div class="empty">لا يوجد مستخدمون</div>'; return; }
-  el.innerHTML = `<table>
+  el.innerHTML = `<div class="table-wrap"><table>
     <tr><th>#</th><th>الاسم</th><th>المعرّف</th><th>Telegram ID</th><th>النقاط</th><th>إجراءات</th></tr>
     ${users.map(u => `<tr>
       <td>${u.id}</td>
@@ -436,7 +474,7 @@ function renderUsers(users) {
       <td><input type="number" id="up-${u.id}" value="${u.points}" style="width:80px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:13px"></td>
       <td><button class="btn btn-blue" onclick="saveUserPoints(${u.id})">حفظ</button></td>
     </tr>`).join('')}
-  </table>`;
+  </table></div>`;
 }
 
 function filterUsers(q) {
