@@ -116,7 +116,7 @@ export async function handleSkipChannel(ctx: Context, channelId: number): Promis
     return;
   }
 
-  await ctx.editMessageText('⏭️ لا توجد مهام أخرى متاحة.\n\nيمكنك العودة لاحقاً أو استلام مكافأتك اليومية.', {
+  await ctx.editMessageText('✅ اكتملت مهامك!\n\nلقد تخطيت جميع المهام المتاحة حالياً.\nعُد لاحقاً لمهام جديدة أو استلم مكافأتك اليومية.', {
     reply_markup: { inline_keyboard: [[{ text: '🔙 رجوع للقائمة', callback_data: 'earn_menu' }]] },
   });
 }
@@ -145,7 +145,7 @@ export async function handleSkipCampaign(ctx: Context, campaignId: number): Prom
     return;
   }
 
-  await ctx.editMessageText('⏭️ لا توجد مهام أخرى متاحة.\n\nيمكنك العودة لاحقاً أو استلام مكافأتك اليومية.', {
+  await ctx.editMessageText('✅ اكتملت مهامك!\n\nلقد تخطيت جميع المهام المتاحة حالياً.\nعُد لاحقاً لمهام جديدة أو استلم مكافأتك اليومية.', {
     reply_markup: { inline_keyboard: [[{ text: '🔙 رجوع للقائمة', callback_data: 'earn_menu' }]] },
   });
 }
@@ -176,7 +176,10 @@ export async function handleCheckChannel(ctx: Context, channelId: number): Promi
       return;
     }
   } catch {
-    await ctx.answerCbQuery('⚠️ تعذّر التحقق. تأكد أن القناة عامة وأن البوت مشرف.'); return;
+    // getChatMember قد يفشل إذا كان المستخدم غير مشترك — نعامله كعدم اشتراك
+    await ctx.answerCbQuery('❌ لم يتم التحقق من اشتراكك!');
+    await ctx.reply(notSubscribedMessage());
+    return;
   }
 
   if (!await completeTask(user.id, channelId)) {
@@ -222,7 +225,10 @@ export async function handleCheckCampaign(ctx: Context, campaignId: number): Pro
       return;
     }
   } catch {
-    await ctx.answerCbQuery('⚠️ تعذّر التحقق. تأكد أن القناة عامة وأن البوت مشرف.'); return;
+    // getChatMember قد يفشل إذا كان المستخدم غير مشترك — نعامله كعدم اشتراك
+    await ctx.answerCbQuery('❌ لم يتم التحقق من اشتراكك!');
+    await ctx.reply(notSubscribedMessage());
+    return;
   }
 
   const { success, campaignCompleted } = await recordCampaignSubscription(user.id, campaignId);
