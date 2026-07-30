@@ -7,7 +7,7 @@ export async function handleStart(ctx: Context): Promise<void> {
   const from = ctx.from;
   if (!from) return;
 
-  const { user, isNew } = getOrCreateUser(
+  const { user, isNew } = await getOrCreateUser(
     from.id,
     from.first_name,
     from.last_name ?? null,

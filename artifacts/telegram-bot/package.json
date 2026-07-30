@@ -9,10 +9,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "pg": "^8.22.0",
     "telegraf": "^4.16.3"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/pg": "^8.20.0",
     "tsx": "catalog:",
     "typescript": "~5.9.3"
   }

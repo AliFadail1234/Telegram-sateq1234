@@ -43,8 +43,7 @@ export function isAdmin(telegramId: number): boolean {
 
 type AdminState =
   | { step: 'add_channel_username' }
-  | { step: 'add_channel_name'; username: string }
-  | { step: 'add_channel_points'; username: string; name: string }
+  | { step: 'add_channel_points'; username: string }
   | { step: 'delete_channel_id' }
   | { step: 'edit_channel_id' }
   | { step: 'edit_channel_points'; channelId: number }
@@ -82,11 +81,10 @@ export async function handleAdminCallback(ctx: Context, action: string): Promise
 
   await ctx.answerCbQuery();
 
-  // ===== إيقاف حملة =====
   if (action.startsWith('admin_stop_campaign_')) {
     const id = parseInt(action.replace('admin_stop_campaign_', ''), 10);
-    stopCampaign(id);
-    const campaign = getCampaignById(id);
+    await stopCampaign(id);
+    const campaign = await getCampaignById(id);
     if (campaign) {
       await ctx.editMessageText(adminCampaignInfoMessage(campaign), adminCampaignActionsKeyboard(id, campaign.status));
     } else {
@@ -95,18 +93,16 @@ export async function handleAdminCallback(ctx: Context, action: string): Promise
     return;
   }
 
-  // ===== حذف حملة =====
   if (action.startsWith('admin_delete_campaign_')) {
     const id = parseInt(action.replace('admin_delete_campaign_', ''), 10);
-    deleteCampaignById(id);
+    await deleteCampaignById(id);
     await ctx.editMessageText('🗑️ تم حذف الحملة بنجاح.', adminCampaignsKeyboard);
     return;
   }
 
-  // ===== عرض حملة واحدة =====
   if (action.startsWith('admin_view_campaign_')) {
     const id = parseInt(action.replace('admin_view_campaign_', ''), 10);
-    const campaign = getCampaignById(id);
+    const campaign = await getCampaignById(id);
     if (!campaign) {
       await ctx.editMessageText('❌ الحملة غير موجودة.', adminCampaignsKeyboard);
       return;
@@ -120,24 +116,23 @@ export async function handleAdminCallback(ctx: Context, action: string): Promise
       await ctx.editMessageText('🛠️ لوحة الأدمن\n\nاختر ما تريد إدارته:', adminMenuKeyboard);
       break;
 
-    // ===== إدارة القنوات =====
     case 'admin_channels':
       await ctx.editMessageText('📢 إدارة قنوات الأدمن\n\nاختر عملية:', adminChannelsKeyboard);
       break;
 
     case 'admin_add_channel':
       adminStates.set(from.id, { step: 'add_channel_username' });
-      await ctx.editMessageText('➕ إضافة قناة\n\nأرسل معرّف القناة (مثال: @channelname)\n\n/cancel للإلغاء.');
+      await ctx.editMessageText('➕ إضافة قناة\n\nأرسل معرّف القناة (مثال: @channelname أو t.me/channelname)\n\n/cancel للإلغاء.');
       break;
 
     case 'admin_list_channels': {
-      const channels = getActiveChannels();
+      const channels = await getActiveChannels();
       if (channels.length === 0) {
         await ctx.editMessageText('📢 لا توجد قنوات مضافة.', adminChannelsKeyboard);
         break;
       }
       const list = channels.map((c, i) =>
-        `${i + 1}. ${c.channel_name} (@${c.channel_username}) — ${c.points_reward} نقطة — ID: ${c.id}`
+        `${i + 1}. @${c.channel_username} — ${c.points_reward} نقطة — ID: ${c.id}`
       ).join('\n');
       await ctx.editMessageText(`📢 القنوات النشطة:\n\n${list}`, Markup.inlineKeyboard([
         [Markup.button.callback('🗑️ حذف قناة', 'admin_delete_channel')],
@@ -157,13 +152,12 @@ export async function handleAdminCallback(ctx: Context, action: string): Promise
       await ctx.editMessageText('✏️ أرسل رقم ID القناة لتعديل نقاطها:\n\n/cancel للإلغاء.');
       break;
 
-    // ===== إدارة الحملات =====
     case 'admin_campaigns':
       await ctx.editMessageText('🎯 إدارة الحملات\n\nاختر نوع الحملات:', adminCampaignsKeyboard);
       break;
 
     case 'admin_active_campaigns': {
-      const campaigns = getActiveCampaigns();
+      const campaigns = await getActiveCampaigns();
       if (campaigns.length === 0) {
         await ctx.editMessageText('🎯 لا توجد حملات نشطة حالياً.', adminCampaignsKeyboard);
         break;
@@ -180,7 +174,7 @@ export async function handleAdminCallback(ctx: Context, action: string): Promise
     }
 
     case 'admin_completed_campaigns': {
-      const campaigns = getCompletedCampaigns();
+      const campaigns = await getCompletedCampaigns();
       if (campaigns.length === 0) {
         await ctx.editMessageText('✅ لا توجد حملات مكتملة بعد.', adminCampaignsKeyboard);
         break;
@@ -192,7 +186,6 @@ export async function handleAdminCallback(ctx: Context, action: string): Promise
       break;
     }
 
-    // ===== إدارة المستخدمين =====
     case 'admin_users':
       await ctx.editMessageText('👥 إدارة المستخدمين\n\nاختر عملية:', adminUsersKeyboard);
       break;
@@ -202,20 +195,21 @@ export async function handleAdminCallback(ctx: Context, action: string): Promise
       await ctx.editMessageText('🔍 أرسل اسم المستخدم أو الـ Telegram ID:\n\n/cancel للإلغاء.');
       break;
 
-    case 'admin_users_count':
-      await ctx.editMessageText(`👥 عدد المستخدمين: ${getUsersCount()}`, adminBackKeyboard);
+    case 'admin_users_count': {
+      const count = await getUsersCount();
+      await ctx.editMessageText(`👥 عدد المستخدمين: ${count}`, adminBackKeyboard);
       break;
+    }
 
-    // ===== الإحصائيات =====
     case 'admin_stats': {
-      const text = adminStatsMessage(
+      const [users, tasks, channels, campaigns, points] = await Promise.all([
         getUsersCount(),
         getTasksCount(),
         getChannelsCount(),
         getCampaignsCount(),
         getTotalPointsCirculated(),
-      );
-      await ctx.editMessageText(text, adminBackKeyboard);
+      ]);
+      await ctx.editMessageText(adminStatsMessage(users, tasks, channels, campaigns, points), adminBackKeyboard);
       break;
     }
   }
@@ -238,23 +232,18 @@ export async function handleAdminTextInput(ctx: Context, text: string): Promise<
 
   switch (state.step) {
     case 'add_channel_username': {
-      const username = text.replace(/^@/, '').trim();
+      const raw = text.trim();
+      const username = raw.replace(/^@/, '').replace(/^https?:\/\/t\.me\//i, '').trim();
       if (!username) { await ctx.reply('⚠️ معرّف غير صحيح.'); return true; }
-      adminStates.set(from.id, { step: 'add_channel_name', username });
-      await ctx.reply(`✅ المعرّف: @${username}\n\nأرسل اسم القناة الظاهر للمستخدمين:`);
-      return true;
-    }
-
-    case 'add_channel_name': {
-      adminStates.set(from.id, { step: 'add_channel_points', username: state.username, name: text });
-      await ctx.reply(`✅ الاسم: ${text}\n\nأرسل عدد النقاط التي تُمنح عند الاشتراك:`);
+      adminStates.set(from.id, { step: 'add_channel_points', username });
+      await ctx.reply(`✅ المعرّف: @${username}\n\nأرسل عدد النقاط التي تُمنح عند الاشتراك:`);
       return true;
     }
 
     case 'add_channel_points': {
       const points = parseInt(text, 10);
       if (isNaN(points) || points < 1) { await ctx.reply('⚠️ أدخل رقماً أكبر من صفر:'); return true; }
-      createChannel(state.username, state.name, points);
+      await createChannel(state.username, state.username, points);
       clearAdminState(from.id);
       await ctx.reply(`✅ تمت إضافة القناة!\n\n📢 @${state.username}\n💰 ${points} نقطة`, adminMenuKeyboard);
       return true;
@@ -263,7 +252,7 @@ export async function handleAdminTextInput(ctx: Context, text: string): Promise<
     case 'delete_channel_id': {
       const id = parseInt(text, 10);
       if (isNaN(id)) { await ctx.reply('⚠️ أدخل رقم ID صحيح:'); return true; }
-      deleteChannel(id);
+      await deleteChannel(id);
       clearAdminState(from.id);
       await ctx.reply(`✅ تم حذف القناة #${id}.`, adminMenuKeyboard);
       return true;
@@ -280,7 +269,7 @@ export async function handleAdminTextInput(ctx: Context, text: string): Promise<
     case 'edit_channel_points': {
       const points = parseInt(text, 10);
       if (isNaN(points) || points < 1) { await ctx.reply('⚠️ أدخل رقماً أكبر من صفر:'); return true; }
-      updateChannelPoints(state.channelId, points);
+      await updateChannelPoints(state.channelId, points);
       clearAdminState(from.id);
       await ctx.reply(`✅ تم تحديث نقاط القناة #${state.channelId} إلى ${points}.`, adminMenuKeyboard);
       return true;
@@ -289,11 +278,12 @@ export async function handleAdminTextInput(ctx: Context, text: string): Promise<
     case 'search_user': {
       let user = null;
       const numId = parseInt(text, 10);
-      if (!isNaN(numId)) user = searchUserByTelegramId(numId);
-      if (!user) user = searchUserByUsername(text.replace('@', ''));
+      if (!isNaN(numId)) user = await searchUserByTelegramId(numId);
+      if (!user) user = await searchUserByUsername(text.replace('@', ''));
       clearAdminState(from.id);
       if (!user) { await ctx.reply('❌ لم يُعثر على المستخدم.', adminMenuKeyboard); return true; }
-      await ctx.reply(adminUserInfoMessage(user, getUserCompletedTasksCount(user.id)), adminMenuKeyboard);
+      const count = await getUserCompletedTasksCount(user.id);
+      await ctx.reply(adminUserInfoMessage(user, count), adminMenuKeyboard);
       return true;
     }
   }

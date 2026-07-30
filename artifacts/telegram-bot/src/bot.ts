@@ -7,8 +7,8 @@ if (!BOT_TOKEN) {
   throw new Error('❌ TELEGRAM_BOT_TOKEN غير محدد في متغيرات البيئة.');
 }
 
-// تهيئة قاعدة البيانات
-initDatabase();
+// تهيئة قاعدة البيانات (Supabase)
+await initDatabase();
 
 // إنشاء البوت
 export const bot = new Telegraf(BOT_TOKEN);

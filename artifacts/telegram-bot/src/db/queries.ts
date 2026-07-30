@@ -1,4 +1,4 @@
-import { db } from './database.js';
+import { pool } from './database.js';
 
 // ========== أنواع البيانات ==========
 
@@ -40,245 +40,301 @@ export interface DailyClaimStatus {
 
 // ========== مساعدو تحويل الأنواع ==========
 
-function toUser(r: Record<string, unknown>): User {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toUser(r: any): User {
   return {
-    id: Number(r['id']),
-    telegram_id: Number(r['telegram_id']),
-    username: r['username'] as string | null,
-    first_name: r['first_name'] as string,
-    last_name: r['last_name'] as string | null,
-    points: Number(r['points']),
-    created_at: r['created_at'] as string,
+    id: Number(r.id),
+    telegram_id: Number(r.telegram_id),
+    username: r.username ?? null,
+    first_name: r.first_name,
+    last_name: r.last_name ?? null,
+    points: Number(r.points),
+    created_at: r.created_at,
   };
 }
 
-function toChannel(r: Record<string, unknown>): Channel {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toChannel(r: any): Channel {
   return {
-    id: Number(r['id']),
-    channel_username: r['channel_username'] as string,
-    channel_name: r['channel_name'] as string,
-    points_reward: Number(r['points_reward']),
-    is_active: Number(r['is_active']),
-    created_at: r['created_at'] as string,
+    id: Number(r.id),
+    channel_username: r.channel_username,
+    channel_name: r.channel_name,
+    points_reward: Number(r.points_reward),
+    is_active: Number(r.is_active),
+    created_at: r.created_at,
   };
 }
 
-function toCampaign(r: Record<string, unknown>): Campaign {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toCampaign(r: any): Campaign {
   return {
-    id: Number(r['id']),
-    user_id: Number(r['user_id']),
-    channel_username: r['channel_username'] as string,
-    channel_name: r['channel_name'] as string,
-    target_subscribers: Number(r['target_subscribers']),
-    completed_subscribers: Number(r['completed_subscribers']),
-    points_paid: Number(r['points_paid']),
-    status: r['status'] as Campaign['status'],
-    created_at: r['created_at'] as string,
+    id: Number(r.id),
+    user_id: Number(r.user_id),
+    channel_username: r.channel_username,
+    channel_name: r.channel_name,
+    target_subscribers: Number(r.target_subscribers),
+    completed_subscribers: Number(r.completed_subscribers),
+    points_paid: Number(r.points_paid),
+    status: r.status as Campaign['status'],
+    created_at: r.created_at,
   };
 }
 
 // ========== المستخدمون ==========
 
-export function getUserByTelegramId(telegramId: number): User | undefined {
-  const r = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(telegramId) as Record<string, unknown> | undefined;
-  return r ? toUser(r) : undefined;
+export async function getUserByTelegramId(telegramId: number): Promise<User | undefined> {
+  const { rows } = await pool.query('SELECT * FROM users WHERE telegram_id = $1', [telegramId]);
+  return rows[0] ? toUser(rows[0]) : undefined;
 }
 
-export function getUserById(id: number): User | undefined {
-  const r = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as Record<string, unknown> | undefined;
-  return r ? toUser(r) : undefined;
+export async function getUserById(id: number): Promise<User | undefined> {
+  const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+  return rows[0] ? toUser(rows[0]) : undefined;
 }
 
-export function createUser(telegramId: number, firstName: string, lastName: string | null, username: string | null): User {
-  const res = db.prepare('INSERT INTO users (telegram_id, first_name, last_name, username) VALUES (?, ?, ?, ?)')
-    .run(telegramId, firstName, lastName ?? null, username ?? null) as { lastInsertRowid: number | bigint };
-  return getUserById(Number(res.lastInsertRowid))!;
+export async function createUser(telegramId: number, firstName: string, lastName: string | null, username: string | null): Promise<User> {
+  const { rows } = await pool.query(
+    'INSERT INTO users (telegram_id, first_name, last_name, username) VALUES ($1, $2, $3, $4) RETURNING *',
+    [telegramId, firstName, lastName, username],
+  );
+  return toUser(rows[0]);
 }
 
-export function getOrCreateUser(telegramId: number, firstName: string, lastName: string | null, username: string | null): { user: User; isNew: boolean } {
-  const existing = getUserByTelegramId(telegramId);
+export async function getOrCreateUser(
+  telegramId: number,
+  firstName: string,
+  lastName: string | null,
+  username: string | null,
+): Promise<{ user: User; isNew: boolean }> {
+  const existing = await getUserByTelegramId(telegramId);
   if (existing) return { user: existing, isNew: false };
-  return { user: createUser(telegramId, firstName, lastName, username), isNew: true };
+  const user = await createUser(telegramId, firstName, lastName, username);
+  return { user, isNew: true };
 }
 
-export function addPoints(userId: number, points: number): void {
-  db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(points, userId);
+export async function addPoints(userId: number, points: number): Promise<void> {
+  await pool.query('UPDATE users SET points = points + $1 WHERE id = $2', [points, userId]);
 }
 
-export function deductPoints(userId: number, points: number): boolean {
-  const user = getUserById(userId);
+export async function deductPoints(userId: number, points: number): Promise<boolean> {
+  const user = await getUserById(userId);
   if (!user || user.points < points) return false;
-  db.prepare('UPDATE users SET points = points - ? WHERE id = ?').run(points, userId);
+  await pool.query('UPDATE users SET points = points - $1 WHERE id = $2', [points, userId]);
   return true;
 }
 
-export function getUsersCount(): number {
-  return Number((db.prepare('SELECT COUNT(*) as c FROM users').get() as Record<string, unknown>)['c']);
+export async function getUsersCount(): Promise<number> {
+  const { rows } = await pool.query('SELECT COUNT(*) as c FROM users');
+  return Number(rows[0].c);
 }
 
-export function searchUserByUsername(username: string): User | undefined {
-  const r = db.prepare('SELECT * FROM users WHERE username LIKE ?').get(`%${username}%`) as Record<string, unknown> | undefined;
-  return r ? toUser(r) : undefined;
+export async function searchUserByUsername(username: string): Promise<User | undefined> {
+  const { rows } = await pool.query('SELECT * FROM users WHERE username ILIKE $1', [`%${username}%`]);
+  return rows[0] ? toUser(rows[0]) : undefined;
 }
 
-export function searchUserByTelegramId(telegramId: number): User | undefined {
+export async function searchUserByTelegramId(telegramId: number): Promise<User | undefined> {
   return getUserByTelegramId(telegramId);
+}
+
+export async function getAllUsers(limit = 100, offset = 0): Promise<User[]> {
+  const { rows } = await pool.query('SELECT * FROM users ORDER BY points DESC LIMIT $1 OFFSET $2', [limit, offset]);
+  return rows.map(toUser);
+}
+
+export async function setUserPoints(userId: number, points: number): Promise<void> {
+  await pool.query('UPDATE users SET points = $1 WHERE id = $2', [points, userId]);
 }
 
 // ========== قنوات الأدمن ==========
 
-export function getActiveChannels(): Channel[] {
-  return (db.prepare('SELECT * FROM channels WHERE is_active = 1 ORDER BY created_at DESC').all() as Record<string, unknown>[]).map(toChannel);
+export async function getActiveChannels(): Promise<Channel[]> {
+  const { rows } = await pool.query('SELECT * FROM channels WHERE is_active = 1 ORDER BY created_at DESC');
+  return rows.map(toChannel);
 }
 
-export function getChannelById(id: number): Channel | undefined {
-  const r = db.prepare('SELECT * FROM channels WHERE id = ?').get(id) as Record<string, unknown> | undefined;
-  return r ? toChannel(r) : undefined;
+export async function getChannelById(id: number): Promise<Channel | undefined> {
+  const { rows } = await pool.query('SELECT * FROM channels WHERE id = $1', [id]);
+  return rows[0] ? toChannel(rows[0]) : undefined;
 }
 
-export function createChannel(username: string, name: string, pointsReward: number): Channel {
-  const res = db.prepare('INSERT INTO channels (channel_username, channel_name, points_reward) VALUES (?, ?, ?)')
-    .run(username, name, pointsReward) as { lastInsertRowid: number | bigint };
-  return getChannelById(Number(res.lastInsertRowid))!;
+export async function createChannel(username: string, name: string, pointsReward: number): Promise<Channel> {
+  const { rows } = await pool.query(
+    'INSERT INTO channels (channel_username, channel_name, points_reward) VALUES ($1, $2, $3) RETURNING *',
+    [username, name, pointsReward],
+  );
+  return toChannel(rows[0]);
 }
 
-export function deleteChannel(id: number): void {
-  db.prepare('DELETE FROM channels WHERE id = ?').run(id);
+export async function deleteChannel(id: number): Promise<void> {
+  await pool.query('DELETE FROM channels WHERE id = $1', [id]);
 }
 
-export function updateChannelPoints(id: number, points: number): void {
-  db.prepare('UPDATE channels SET points_reward = ? WHERE id = ?').run(points, id);
+export async function updateChannelPoints(id: number, points: number): Promise<void> {
+  await pool.query('UPDATE channels SET points_reward = $1 WHERE id = $2', [points, id]);
 }
 
-export function getChannelsCount(): number {
-  return Number((db.prepare('SELECT COUNT(*) as c FROM channels WHERE is_active = 1').get() as Record<string, unknown>)['c']);
+export async function getChannelsCount(): Promise<number> {
+  const { rows } = await pool.query('SELECT COUNT(*) as c FROM channels WHERE is_active = 1');
+  return Number(rows[0].c);
 }
 
 // ========== مهام قنوات الأدمن ==========
 
-export function hasCompletedTask(userId: number, channelId: number): boolean {
-  return !!db.prepare('SELECT id FROM completed_tasks WHERE user_id = ? AND channel_id = ?').get(userId, channelId);
+export async function hasCompletedTask(userId: number, channelId: number): Promise<boolean> {
+  const { rows } = await pool.query(
+    'SELECT id FROM completed_tasks WHERE user_id = $1 AND channel_id = $2',
+    [userId, channelId],
+  );
+  return rows.length > 0;
 }
 
-export function completeTask(userId: number, channelId: number): boolean {
+export async function completeTask(userId: number, channelId: number): Promise<boolean> {
   try {
-    db.prepare('INSERT INTO completed_tasks (user_id, channel_id) VALUES (?, ?)').run(userId, channelId);
+    await pool.query(
+      'INSERT INTO completed_tasks (user_id, channel_id) VALUES ($1, $2)',
+      [userId, channelId],
+    );
     return true;
   } catch { return false; }
 }
 
-export function getUserCompletedTasksCount(userId: number): number {
-  return Number((db.prepare('SELECT COUNT(*) as c FROM completed_tasks WHERE user_id = ?').get(userId) as Record<string, unknown>)['c']);
+export async function getUserCompletedTasksCount(userId: number): Promise<number> {
+  const { rows } = await pool.query('SELECT COUNT(*) as c FROM completed_tasks WHERE user_id = $1', [userId]);
+  return Number(rows[0].c);
 }
 
-export function getNextPendingChannel(userId: number): Channel | undefined {
-  const r = db.prepare(`
+export async function getNextPendingChannel(userId: number): Promise<Channel | undefined> {
+  const { rows } = await pool.query(`
     SELECT c.* FROM channels c
     WHERE c.is_active = 1
-      AND c.id NOT IN (SELECT channel_id FROM completed_tasks WHERE user_id = ?)
+      AND c.id NOT IN (SELECT channel_id FROM completed_tasks WHERE user_id = $1)
     ORDER BY c.created_at ASC LIMIT 1
-  `).get(userId) as Record<string, unknown> | undefined;
-  return r ? toChannel(r) : undefined;
+  `, [userId]);
+  return rows[0] ? toChannel(rows[0]) : undefined;
 }
 
 // ========== الحملات ==========
 
-export function getCampaignById(id: number): Campaign | undefined {
-  const r = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(id) as Record<string, unknown> | undefined;
-  return r ? toCampaign(r) : undefined;
+export async function getCampaignById(id: number): Promise<Campaign | undefined> {
+  const { rows } = await pool.query('SELECT * FROM campaigns WHERE id = $1', [id]);
+  return rows[0] ? toCampaign(rows[0]) : undefined;
 }
 
-export function createCampaign(userId: number, channelUsername: string, channelName: string, targetSubscribers: number, pointsPaid: number): Campaign {
-  const res = db.prepare(`
+export async function createCampaign(
+  userId: number,
+  channelUsername: string,
+  channelName: string,
+  targetSubscribers: number,
+  pointsPaid: number,
+): Promise<Campaign> {
+  const { rows } = await pool.query(`
     INSERT INTO campaigns (user_id, channel_username, channel_name, target_subscribers, points_paid)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(userId, channelUsername, channelName, targetSubscribers, pointsPaid) as { lastInsertRowid: number | bigint };
-  return getCampaignById(Number(res.lastInsertRowid))!;
+    VALUES ($1, $2, $3, $4, $5) RETURNING *
+  `, [userId, channelUsername, channelName, targetSubscribers, pointsPaid]);
+  return toCampaign(rows[0]);
 }
 
-// الحملة التالية النشطة التي لم يشترك فيها المستخدم بعد
-export function getNextPendingCampaign(userId: number): Campaign | undefined {
-  const r = db.prepare(`
+export async function getNextPendingCampaign(userId: number): Promise<Campaign | undefined> {
+  const { rows } = await pool.query(`
     SELECT * FROM campaigns
     WHERE status = 'active'
-      AND user_id != ?
-      AND id NOT IN (SELECT campaign_id FROM campaign_subscriptions WHERE user_id = ?)
+      AND user_id != $1
+      AND id NOT IN (SELECT campaign_id FROM campaign_subscriptions WHERE user_id = $1)
     ORDER BY created_at ASC LIMIT 1
-  `).get(userId, userId) as Record<string, unknown> | undefined;
-  return r ? toCampaign(r) : undefined;
+  `, [userId]);
+  return rows[0] ? toCampaign(rows[0]) : undefined;
 }
 
-export function hasSubscribedToCampaign(userId: number, campaignId: number): boolean {
-  return !!db.prepare('SELECT id FROM campaign_subscriptions WHERE user_id = ? AND campaign_id = ?').get(userId, campaignId);
+export async function hasSubscribedToCampaign(userId: number, campaignId: number): Promise<boolean> {
+  const { rows } = await pool.query(
+    'SELECT id FROM campaign_subscriptions WHERE user_id = $1 AND campaign_id = $2',
+    [userId, campaignId],
+  );
+  return rows.length > 0;
 }
 
-// تسجيل الاشتراك + زيادة العداد + إغلاق الحملة إذا اكتملت
-export function recordCampaignSubscription(userId: number, campaignId: number): { success: boolean; campaignCompleted: boolean } {
+export async function recordCampaignSubscription(
+  userId: number,
+  campaignId: number,
+): Promise<{ success: boolean; campaignCompleted: boolean }> {
+  const client = await pool.connect();
   try {
-    db.prepare('INSERT INTO campaign_subscriptions (user_id, campaign_id) VALUES (?, ?)').run(userId, campaignId);
-  } catch {
-    return { success: false, campaignCompleted: false };
+    await client.query('BEGIN');
+    try {
+      await client.query(
+        'INSERT INTO campaign_subscriptions (user_id, campaign_id) VALUES ($1, $2)',
+        [userId, campaignId],
+      );
+    } catch {
+      await client.query('ROLLBACK');
+      return { success: false, campaignCompleted: false };
+    }
+
+    await client.query(
+      'UPDATE campaigns SET completed_subscribers = completed_subscribers + 1 WHERE id = $1',
+      [campaignId],
+    );
+
+    const { rows } = await client.query('SELECT * FROM campaigns WHERE id = $1', [campaignId]);
+    const campaign = toCampaign(rows[0]);
+    const campaignCompleted = campaign.completed_subscribers >= campaign.target_subscribers;
+
+    if (campaignCompleted) {
+      await client.query("UPDATE campaigns SET status = 'completed' WHERE id = $1", [campaignId]);
+    }
+
+    await client.query('COMMIT');
+    return { success: true, campaignCompleted };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
-
-  db.prepare('UPDATE campaigns SET completed_subscribers = completed_subscribers + 1 WHERE id = ?').run(campaignId);
-
-  const campaign = getCampaignById(campaignId)!;
-  const campaignCompleted = campaign.completed_subscribers >= campaign.target_subscribers;
-
-  if (campaignCompleted) {
-    db.prepare("UPDATE campaigns SET status = 'completed' WHERE id = ?").run(campaignId);
-  }
-
-  return { success: true, campaignCompleted };
 }
 
-export function stopCampaign(id: number): void {
-  db.prepare("UPDATE campaigns SET status = 'stopped' WHERE id = ?").run(id);
+export async function stopCampaign(id: number): Promise<void> {
+  await pool.query("UPDATE campaigns SET status = 'stopped' WHERE id = $1", [id]);
 }
 
-export function deleteCampaignById(id: number): void {
-  db.prepare('DELETE FROM campaign_subscriptions WHERE campaign_id = ?').run(id);
-  db.prepare('DELETE FROM campaigns WHERE id = ?').run(id);
+export async function deleteCampaignById(id: number): Promise<void> {
+  await pool.query('DELETE FROM campaign_subscriptions WHERE campaign_id = $1', [id]);
+  await pool.query('DELETE FROM campaigns WHERE id = $1', [id]);
 }
 
-export function getActiveCampaigns(): Campaign[] {
-  return (db.prepare("SELECT * FROM campaigns WHERE status = 'active' ORDER BY created_at DESC").all() as Record<string, unknown>[]).map(toCampaign);
+export async function getActiveCampaigns(): Promise<Campaign[]> {
+  const { rows } = await pool.query("SELECT * FROM campaigns WHERE status = 'active' ORDER BY created_at DESC");
+  return rows.map(toCampaign);
 }
 
-export function getCompletedCampaigns(): Campaign[] {
-  return (db.prepare("SELECT * FROM campaigns WHERE status = 'completed' ORDER BY created_at DESC LIMIT 20").all() as Record<string, unknown>[]).map(toCampaign);
+export async function getCompletedCampaigns(): Promise<Campaign[]> {
+  const { rows } = await pool.query("SELECT * FROM campaigns WHERE status = 'completed' ORDER BY created_at DESC LIMIT 20");
+  return rows.map(toCampaign);
 }
 
-export function getUserCampaignsCount(userId: number): number {
-  return Number((db.prepare('SELECT COUNT(*) as c FROM campaigns WHERE user_id = ?').get(userId) as Record<string, unknown>)['c']);
+export async function getUserCampaignsCount(userId: number): Promise<number> {
+  const { rows } = await pool.query('SELECT COUNT(*) as c FROM campaigns WHERE user_id = $1', [userId]);
+  return Number(rows[0].c);
 }
 
-export function getCampaignsCount(): number {
-  return Number((db.prepare("SELECT COUNT(*) as c FROM campaigns WHERE status = 'active'").get() as Record<string, unknown>)['c']);
-}
-
-// ========== قائمة المستخدمين ==========
-
-export function getAllUsers(limit = 100, offset = 0): User[] {
-  return (db.prepare('SELECT * FROM users ORDER BY points DESC LIMIT ? OFFSET ?').all(limit, offset) as Record<string, unknown>[]).map(toUser);
-}
-
-export function setUserPoints(userId: number, points: number): void {
-  db.prepare('UPDATE users SET points = ? WHERE id = ?').run(points, userId);
+export async function getCampaignsCount(): Promise<number> {
+  const { rows } = await pool.query("SELECT COUNT(*) as c FROM campaigns WHERE status = 'active'");
+  return Number(rows[0].c);
 }
 
 // ========== إحصائيات ==========
 
-export function getTasksCount(): number {
-  const tasks = Number((db.prepare('SELECT COUNT(*) as c FROM completed_tasks').get() as Record<string, unknown>)['c']);
-  const subs = Number((db.prepare('SELECT COUNT(*) as c FROM campaign_subscriptions').get() as Record<string, unknown>)['c']);
-  return tasks + subs;
+export async function getTasksCount(): Promise<number> {
+  const { rows: r1 } = await pool.query('SELECT COUNT(*) as c FROM completed_tasks');
+  const { rows: r2 } = await pool.query('SELECT COUNT(*) as c FROM campaign_subscriptions');
+  return Number(r1[0].c) + Number(r2[0].c);
 }
 
-export function getTotalPointsCirculated(): number {
-  const fromChannels = Number((db.prepare('SELECT COALESCE(SUM(points_reward), 0) as t FROM channels').get() as Record<string, unknown>)['t']);
-  const fromCampaigns = Number((db.prepare('SELECT COALESCE(SUM(points_paid), 0) as t FROM campaigns').get() as Record<string, unknown>)['t']);
-  return fromChannels + fromCampaigns;
+export async function getTotalPointsCirculated(): Promise<number> {
+  const { rows: r1 } = await pool.query('SELECT COALESCE(SUM(points_reward), 0) as t FROM channels');
+  const { rows: r2 } = await pool.query('SELECT COALESCE(SUM(points_paid), 0) as t FROM campaigns');
+  return Number(r1[0].t) + Number(r2[0].t);
 }
 
 // ========== المكافأة اليومية ==========
@@ -287,17 +343,36 @@ function getTodayUTC(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function getDailyClaimStatus(userId: number): DailyClaimStatus {
+export async function getDailyClaimStatus(userId: number): Promise<DailyClaimStatus> {
   const today = getTodayUTC();
-  const r = db.prepare('SELECT claimed_date FROM daily_claims WHERE user_id = ? AND claimed_date = ?').get(userId, today) as Record<string, unknown> | undefined;
-  return { canClaim: !r, lastClaimDate: r ? (r['claimed_date'] as string) : null };
+  const { rows } = await pool.query(
+    'SELECT claimed_date FROM daily_claims WHERE user_id = $1 AND claimed_date = $2',
+    [userId, today],
+  );
+  return { canClaim: rows.length === 0, lastClaimDate: rows[0]?.claimed_date ?? null };
 }
 
-export function claimDailyBonus(userId: number, points: number): { success: boolean } {
+export async function claimDailyBonus(userId: number, points: number): Promise<{ success: boolean }> {
   const today = getTodayUTC();
+  const client = await pool.connect();
   try {
-    db.prepare('INSERT INTO daily_claims (user_id, claimed_date, points_earned) VALUES (?, ?, ?)').run(userId, today, points);
-    addPoints(userId, points);
+    await client.query('BEGIN');
+    try {
+      await client.query(
+        'INSERT INTO daily_claims (user_id, claimed_date, points_earned) VALUES ($1, $2, $3)',
+        [userId, today, points],
+      );
+    } catch {
+      await client.query('ROLLBACK');
+      return { success: false };
+    }
+    await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [points, userId]);
+    await client.query('COMMIT');
     return { success: true };
-  } catch { return { success: false }; }
+  } catch {
+    await client.query('ROLLBACK');
+    return { success: false };
+  } finally {
+    client.release();
+  }
 }

@@ -6,10 +6,10 @@ export async function handleDailyBonus(ctx: Context): Promise<void> {
   const from = ctx.from;
   if (!from) return;
 
-  const user = getUserByTelegramId(from.id);
+  const user = await getUserByTelegramId(from.id);
   if (!user) { await ctx.answerCbQuery('⚠️ أرسل /start أولاً.'); return; }
 
-  const result = claimDailyBonus(user.id, DAILY_BONUS_POINTS);
+  const result = await claimDailyBonus(user.id, DAILY_BONUS_POINTS);
 
   if (!result.success) {
     const now = new Date();
@@ -27,7 +27,7 @@ export async function handleDailyBonus(ctx: Context): Promise<void> {
     return;
   }
 
-  const updated = getUserById(user.id)!;
+  const updated = (await getUserById(user.id))!;
   await ctx.answerCbQuery(`✅ تم إضافة ${DAILY_BONUS_POINTS} نقاط!`);
   await ctx.editMessageText(
     `🎁 مبروك! استلمت مكافأتك اليومية\n\n💰 تمت إضافة: ${DAILY_BONUS_POINTS} نقاط\n🏦 رصيدك الكلي: ${updated.points} نقطة\n\n⏰ عُد غداً لمكافأة جديدة!`,

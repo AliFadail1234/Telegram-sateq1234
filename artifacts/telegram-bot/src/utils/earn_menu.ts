@@ -5,18 +5,20 @@ export async function showEarnMenu(ctx: Context, editMode: boolean): Promise<voi
   const from = ctx.from;
   if (!from) return;
 
-  const user = getUserByTelegramId(from.id);
+  const user = await getUserByTelegramId(from.id);
   if (!user) {
     await ctx.reply('⚠️ أرسل /start للتسجيل.');
     return;
   }
 
-  const dailyStatus = getDailyClaimStatus(user.id);
-  const hasChannelTask = !!getNextPendingChannel(user.id);
-  const hasCampaignTask = !!getNextPendingCampaign(user.id);
+  const [dailyStatus, hasChannelTask, hasCampaignTask] = await Promise.all([
+    getDailyClaimStatus(user.id),
+    getNextPendingChannel(user.id).then(v => !!v),
+    getNextPendingCampaign(user.id).then(v => !!v),
+  ]);
+
   const hasAnyTask = hasChannelTask || hasCampaignTask;
 
-  // نص زر المكافأة اليومية
   let dailyBtnText: string;
   if (dailyStatus.canClaim) {
     dailyBtnText = '🎁 استلم مكافأتك اليومية (+5 نقاط)';

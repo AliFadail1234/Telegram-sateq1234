@@ -23,25 +23,20 @@ import {
 import { showEarnMenu } from '../utils/earn_menu.js';
 import { POINTS_PER_CAMPAIGN_SUBSCRIPTION } from '../config/pricing.js';
 
-// ===== عرض قائمة كسب النقاط =====
-
 export async function handleTasks(ctx: Context): Promise<void> {
   await showEarnMenu(ctx, false);
 }
-
-// ===== عرض مهام الاشتراك =====
 
 export async function handleEarnTasks(ctx: Context): Promise<void> {
   const from = ctx.from;
   if (!from) return;
 
-  const user = getUserByTelegramId(from.id);
+  const user = await getUserByTelegramId(from.id);
   if (!user) { await ctx.answerCbQuery('⚠️ أرسل /start أولاً.'); return; }
 
   await ctx.answerCbQuery();
 
-  // أولوية: قنوات الأدمن أولاً ثم الحملات
-  const channel = getNextPendingChannel(user.id);
+  const channel = await getNextPendingChannel(user.id);
   if (channel) {
     await ctx.editMessageText(
       channelTaskMessage(channel),
@@ -50,7 +45,7 @@ export async function handleEarnTasks(ctx: Context): Promise<void> {
     return;
   }
 
-  const campaign = getNextPendingCampaign(user.id);
+  const campaign = await getNextPendingCampaign(user.id);
   if (campaign) {
     await ctx.editMessageText(
       campaignTaskMessage(campaign),
@@ -64,20 +59,18 @@ export async function handleEarnTasks(ctx: Context): Promise<void> {
   });
 }
 
-// ===== التحقق من اشتراك قناة الأدمن =====
-
 export async function handleCheckChannel(ctx: Context, channelId: number): Promise<void> {
   const from = ctx.from;
   if (!from) return;
 
-  const user = getUserByTelegramId(from.id);
+  const user = await getUserByTelegramId(from.id);
   if (!user) { await ctx.answerCbQuery('⚠️ أرسل /start أولاً.'); return; }
 
-  if (hasCompletedTask(user.id, channelId)) {
+  if (await hasCompletedTask(user.id, channelId)) {
     await ctx.answerCbQuery('✅ أكملت هذه المهمة مسبقاً!'); return;
   }
 
-  const channel = getChannelById(channelId);
+  const channel = await getChannelById(channelId);
   if (!channel || !channel.is_active) {
     await ctx.answerCbQuery('⚠️ هذه القناة لم تعد متاحة.'); return;
   }
@@ -95,12 +88,12 @@ export async function handleCheckChannel(ctx: Context, channelId: number): Promi
     await ctx.answerCbQuery('⚠️ تعذّر التحقق. تأكد أن القناة عامة وأن البوت مشرف.'); return;
   }
 
-  if (!completeTask(user.id, channelId)) {
+  if (!await completeTask(user.id, channelId)) {
     await ctx.answerCbQuery('✅ أكملت هذه المهمة مسبقاً!'); return;
   }
 
-  addPoints(user.id, channel.points_reward);
-  const updated = getUserById(user.id)!;
+  await addPoints(user.id, channel.points_reward);
+  const updated = (await getUserById(user.id))!;
 
   await ctx.answerCbQuery('✅ تم تسجيل اشتراكك!');
   await ctx.editMessageText(taskCompletedMessage(channel.channel_name, channel.points_reward, updated.points), {
@@ -108,25 +101,22 @@ export async function handleCheckChannel(ctx: Context, channelId: number): Promi
   });
 }
 
-// ===== التحقق من اشتراك حملة المستخدم =====
-
 export async function handleCheckCampaign(ctx: Context, campaignId: number): Promise<void> {
   const from = ctx.from;
   if (!from) return;
 
-  const user = getUserByTelegramId(from.id);
+  const user = await getUserByTelegramId(from.id);
   if (!user) { await ctx.answerCbQuery('⚠️ أرسل /start أولاً.'); return; }
 
-  if (hasSubscribedToCampaign(user.id, campaignId)) {
+  if (await hasSubscribedToCampaign(user.id, campaignId)) {
     await ctx.answerCbQuery('✅ اشتركت في هذه الحملة مسبقاً!'); return;
   }
 
-  const campaign = getCampaignById(campaignId);
+  const campaign = await getCampaignById(campaignId);
   if (!campaign || campaign.status !== 'active') {
     await ctx.answerCbQuery('⚠️ هذه الحملة لم تعد نشطة.'); return;
   }
 
-  // مالك الحملة لا يحصل على نقاط
   if (campaign.user_id === user.id) {
     await ctx.answerCbQuery('⚠️ لا يمكنك الاشتراك في حملتك الخاصة.'); return;
   }
@@ -144,13 +134,13 @@ export async function handleCheckCampaign(ctx: Context, campaignId: number): Pro
     await ctx.answerCbQuery('⚠️ تعذّر التحقق. تأكد أن القناة عامة وأن البوت مشرف.'); return;
   }
 
-  const { success, campaignCompleted } = recordCampaignSubscription(user.id, campaignId);
+  const { success, campaignCompleted } = await recordCampaignSubscription(user.id, campaignId);
   if (!success) {
     await ctx.answerCbQuery('✅ اشتركت في هذه الحملة مسبقاً!'); return;
   }
 
-  addPoints(user.id, POINTS_PER_CAMPAIGN_SUBSCRIPTION);
-  const updated = getUserById(user.id)!;
+  await addPoints(user.id, POINTS_PER_CAMPAIGN_SUBSCRIPTION);
+  const updated = (await getUserById(user.id))!;
 
   await ctx.answerCbQuery('✅ تم تسجيل اشتراكك!');
 
