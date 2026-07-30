@@ -2,6 +2,8 @@ services:
   - type: web
     name: telegram-bot-sateq
     runtime: node
+    region: frankfurt
+    plan: free
     buildCommand: npx pnpm@10 install --no-frozen-lockfile
     startCommand: npx pnpm@10 --filter @workspace/telegram-bot run start
     envVars:
@@ -9,6 +11,13 @@ services:
         sync: false
       - key: ADMIN_ID
         sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
       - key: DATA_DIR
-        value: /opt/render/project/src/data
-    plan: free
+        value: /var/data
+      - key: NODE_ENV
+        value: production
+    disk:
+      name: bot-data
+      mountPath: /var/data
+      sizeGB: 1

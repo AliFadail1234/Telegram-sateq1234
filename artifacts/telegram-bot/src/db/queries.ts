@@ -257,6 +257,16 @@ export function getCampaignsCount(): number {
   return Number((db.prepare("SELECT COUNT(*) as c FROM campaigns WHERE status = 'active'").get() as Record<string, unknown>)['c']);
 }
 
+// ========== قائمة المستخدمين ==========
+
+export function getAllUsers(limit = 100, offset = 0): User[] {
+  return (db.prepare('SELECT * FROM users ORDER BY points DESC LIMIT ? OFFSET ?').all(limit, offset) as Record<string, unknown>[]).map(toUser);
+}
+
+export function setUserPoints(userId: number, points: number): void {
+  db.prepare('UPDATE users SET points = ? WHERE id = ?').run(points, userId);
+}
+
 // ========== إحصائيات ==========
 
 export function getTasksCount(): number {

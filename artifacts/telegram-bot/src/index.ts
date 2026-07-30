@@ -1,19 +1,32 @@
 import http from 'node:http';
 import { bot } from './bot.js';
+import { handleAdminRequest } from './admin/api.js';
 
 console.log('🤖 جاري تشغيل بوت تيليجرام...');
 
-// سيرفر HTTP بسيط لإبقاء الخدمة حية على Render
 const PORT = process.env.PORT ?? 3000;
-const server = http.createServer((_req, res) => {
+
+const server = http.createServer(async (req, res) => {
+  const url = req.url ?? '/';
+
+  // Admin dashboard & API
+  if (url.startsWith('/admin')) {
+    const handled = await handleAdminRequest(req, res);
+    if (handled) return;
+  }
+
+  // Health check
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ status: 'ok', bot: '@dqaalifadel_bot' }));
 });
+
 server.listen(PORT, () => {
-  console.log(`🌐 Health server يعمل على port ${PORT}`);
+  console.log(`🌐 Server يعمل على port ${PORT}`);
+  console.log(`🛠️  لوحة التحكم: http://localhost:${PORT}/admin`);
+  console.log(`🔑  كلمة المرور: ${process.env.ADMIN_PASSWORD ?? 'admin123 (افتراضي)'}`);
 });
 
-// bot.launch() يبدأ الاستطلاع ولا يُرجع إلا عند الإيقاف — لا نستخدم await هنا
+// bot.launch() يبدأ الاستطلاع ولا يُرجع إلا عند الإيقاف
 bot.launch({
   dropPendingUpdates: true,
 }).catch((err: unknown) => {
@@ -21,9 +34,7 @@ bot.launch({
   process.exit(1);
 });
 
-// يُطبع فوراً بعد بدء الاستطلاع
 console.log('✅ البوت يعمل الآن!');
-console.log(`🤖 اسم البوت: @dqaalifadel_bot`);
 console.log('📡 جاهز لاستقبال الرسائل...');
 
 // إيقاف نظيف
