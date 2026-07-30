@@ -1,0 +1,152 @@
+import type { Telegraf } from 'telegraf';
+import type { Context } from 'telegraf';
+import { handleStart } from './start.js';
+import { handleBalance } from './balance.js';
+import { handleAccount } from './account.js';
+import { handleTasks, handleEarnTasks, handleCheckChannel, handleCheckCampaign } from './tasks.js';
+import { handleDailyBonus } from './daily.js';
+import {
+  handlePromote,
+  handlePromoteChannelInput,
+  handlePromoteChoose,
+  handlePromoteConfirm,
+  handlePromoteCancel,
+  getPromoteState,
+  clearPromoteState,
+} from './promote.js';
+import {
+  handleAdmin,
+  handleAdminCallback,
+  handleAdminTextInput,
+} from './admin.js';
+import { getUserByTelegramId } from '../db/queries.js';
+import { mainMenuKeyboard } from '../utils/keyboards.js';
+import { showEarnMenu } from '../utils/earn_menu.js';
+
+export function setupHandlers(bot: Telegraf): void {
+
+  // ========== أوامر ==========
+
+  bot.command('start', handleStart);
+  bot.command('admin', handleAdmin);
+  bot.command('cancel', async (ctx) => {
+    const id = ctx.from?.id ?? 0;
+    clearPromoteState(id);
+    const { clearAdminState } = await import('./admin.js');
+    clearAdminState(id);
+    await ctx.reply('🚫 تم الإلغاء.', mainMenuKeyboard);
+  });
+
+  // ========== أزرار القائمة الرئيسية ==========
+
+  bot.hears('📊 رصيدي', handleBalance);
+  bot.hears('⭐ كسب نقاط', handleTasks);
+  bot.hears('📢 ترويج قناتي', handlePromote);
+  bot.hears('👤 حسابي', handleAccount);
+
+  // ========== Callback queries ==========
+
+  bot.on('callback_query', async (ctx) => {
+    const data = (ctx.callbackQuery as { data?: string }).data;
+    if (!data) return;
+
+    // التحقق من اشتراك قناة الأدمن
+    if (data.startsWith('check_channel_')) {
+      const id = parseInt(data.replace('check_channel_', ''), 10);
+      await handleCheckChannel(ctx, id);
+      return;
+    }
+
+    // التحقق من اشتراك حملة
+    if (data.startsWith('check_campaign_')) {
+      const id = parseInt(data.replace('check_campaign_', ''), 10);
+      await handleCheckCampaign(ctx, id);
+      return;
+    }
+
+    // اختيار عدد مشتركي الحملة: promote_choose_{subs}_{cost}
+    if (data.startsWith('promote_choose_')) {
+      const parts = data.replace('promote_choose_', '').split('_');
+      const subs = parseInt(parts[0] ?? '0', 10);
+      const cost = parseInt(parts[1] ?? '0', 10);
+      await handlePromoteChoose(ctx, subs, cost);
+      return;
+    }
+
+    // تأكيد الحملة: promote_confirm_{subs}_{cost}_{channel}
+    if (data.startsWith('promote_confirm_')) {
+      const rest = data.replace('promote_confirm_', '');
+      const firstUnderscore = rest.indexOf('_');
+      const secondUnderscore = rest.indexOf('_', firstUnderscore + 1);
+      const subs = parseInt(rest.slice(0, firstUnderscore), 10);
+      const cost = parseInt(rest.slice(firstUnderscore + 1, secondUnderscore), 10);
+      const channel = decodeURIComponent(rest.slice(secondUnderscore + 1));
+      await handlePromoteConfirm(ctx, subs, cost, channel);
+      return;
+    }
+
+    // إلغاء الحملة
+    if (data === 'promote_cancel') {
+      await handlePromoteCancel(ctx);
+      return;
+    }
+
+    // المكافأة اليومية
+    if (data === 'daily_bonus') {
+      await handleDailyBonus(ctx);
+      return;
+    }
+
+    // قائمة كسب النقاط
+    if (data === 'earn_menu') {
+      await ctx.answerCbQuery();
+      await showEarnMenu(ctx, true);
+      return;
+    }
+
+    // مهام الاشتراك
+    if (data === 'earn_tasks') {
+      await handleEarnTasks(ctx);
+      return;
+    }
+
+    // لوحة الأدمن
+    if (data.startsWith('admin_')) {
+      await handleAdminCallback(ctx, data);
+      return;
+    }
+
+    await ctx.answerCbQuery();
+  });
+
+  // ========== الرسائل النصية ==========
+
+  bot.on('text', async (ctx: Context) => {
+    const from = ctx.from;
+    if (!from) return;
+
+    const text = (ctx.message as { text?: string }).text ?? '';
+
+    // إدخالات الأدمن أولاً
+    if (await handleAdminTextInput(ctx, text)) return;
+
+    // حالات ترويج القناة
+    const promoteState = getPromoteState(from.id);
+    if (promoteState) {
+      if (text === '/cancel') {
+        clearPromoteState(from.id);
+        await ctx.reply('🚫 تم الإلغاء.', mainMenuKeyboard);
+        return;
+      }
+      if (promoteState.step === 'waiting_channel') {
+        await handlePromoteChannelInput(ctx, text);
+        return;
+      }
+    }
+
+    // رسالة غير معروفة
+    const user = getUserByTelegramId(from.id);
+    if (!user) { await ctx.reply('👋 أرسل /start للبدء.'); return; }
+    await ctx.reply('اختر من القائمة:', mainMenuKeyboard);
+  });
+}
