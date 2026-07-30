@@ -43,7 +43,7 @@ export function isAdmin(telegramId: number): boolean {
 
 type AdminState =
   | { step: 'add_channel_username' }
-  | { step: 'add_channel_points'; username: string }
+  | { step: 'add_channel_points'; username: string; channelName: string }
   | { step: 'delete_channel_id' }
   | { step: 'edit_channel_id' }
   | { step: 'edit_channel_points'; channelId: number }
@@ -233,19 +233,51 @@ export async function handleAdminTextInput(ctx: Context, text: string): Promise<
   switch (state.step) {
     case 'add_channel_username': {
       const raw = text.trim();
-      const username = raw.replace(/^@/, '').replace(/^https?:\/\/t\.me\//i, '').trim();
-      if (!username) { await ctx.reply('⚠️ معرّف غير صحيح.'); return true; }
-      adminStates.set(from.id, { step: 'add_channel_points', username });
-      await ctx.reply(`✅ المعرّف: @${username}\n\nأرسل عدد النقاط التي تُمنح عند الاشتراك:`);
+      const username = raw.replace(/^@/, '').replace(/^https?:\/\/t\.me\//i, '').replace(/\/$/, '').trim();
+      if (!username || username.length < 4) { await ctx.reply('⚠️ معرّف غير صحيح. يجب أن يكون 4 أحرف على الأقل.'); return true; }
+
+      const channelTag = `@${username}`;
+      const verifyMsg = await ctx.reply(`🔍 جاري التحقق من القناة ${channelTag}...`);
+
+      let channelName = channelTag;
+      try {
+        const botInfo = await ctx.telegram.getMe();
+        const botMember = await ctx.telegram.getChatMember(channelTag, botInfo.id);
+        if (!['administrator', 'creator'].includes(botMember.status)) {
+          await ctx.telegram.deleteMessage(from.id, verifyMsg.message_id).catch(() => null);
+          await ctx.reply(
+            `❌ البوت ليس مشرفاً في ${channelTag}\n\n` +
+            `يجب إضافة البوت كمشرف في القناة أولاً حتى يتمكن من التحقق من اشتراك المستخدمين.\n\n` +
+            `أضف البوت كمشرف ثم أعد إرسال المعرّف، أو /cancel للإلغاء.`
+          );
+          return true;
+        }
+        try {
+          const chat = await ctx.telegram.getChat(channelTag);
+          channelName = ('title' in chat && chat.title) ? chat.title : channelTag;
+        } catch { channelName = channelTag; }
+      } catch {
+        await ctx.telegram.deleteMessage(from.id, verifyMsg.message_id).catch(() => null);
+        await ctx.reply(
+          `❌ تعذّر الوصول إلى ${channelTag}\n\n` +
+          `تأكد من:\n• أن المعرّف صحيح\n• أن القناة عامة (public)\n• أن البوت مضاف كمشرف فيها\n\n` +
+          `أعد إرسال المعرّف أو /cancel للإلغاء.`
+        );
+        return true;
+      }
+
+      await ctx.telegram.deleteMessage(from.id, verifyMsg.message_id).catch(() => null);
+      adminStates.set(from.id, { step: 'add_channel_points', username, channelName });
+      await ctx.reply(`✅ تم التحقق من القناة!\n\n📢 ${channelName} (@${username})\nالبوت مشرف ✓\n\nأرسل عدد النقاط التي تُمنح عند الاشتراك:`);
       return true;
     }
 
     case 'add_channel_points': {
       const points = parseInt(text, 10);
       if (isNaN(points) || points < 1) { await ctx.reply('⚠️ أدخل رقماً أكبر من صفر:'); return true; }
-      await createChannel(state.username, state.username, points);
+      await createChannel(state.username, state.channelName, points);
       clearAdminState(from.id);
-      await ctx.reply(`✅ تمت إضافة القناة!\n\n📢 @${state.username}\n💰 ${points} نقطة`, adminMenuKeyboard);
+      await ctx.reply(`✅ تمت إضافة القناة!\n\n📢 ${state.channelName} (@${state.username})\n💰 ${points} نقطة`, adminMenuKeyboard);
       return true;
     }
 
