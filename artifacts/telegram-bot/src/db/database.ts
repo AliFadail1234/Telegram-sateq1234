@@ -11,6 +11,8 @@ export const pool = new Pool({
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
+  // إجبار IPv4 لأن Render (الخطة المجانية) لا يدعم IPv6
+  family: 4,
 });
 
 export async function initDatabase(): Promise<void> {
