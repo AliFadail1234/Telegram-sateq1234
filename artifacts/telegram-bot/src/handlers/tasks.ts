@@ -170,16 +170,18 @@ export async function handleCheckChannel(ctx: Context, channelId: number): Promi
 
   try {
     const member = await ctx.telegram.getChatMember(tag, from.id);
-    // إذا رجع البوت بـ left أو kicked فالمستخدم غير مشترك فعلاً
     if (member.status === 'left' || member.status === 'kicked') {
       await ctx.answerCbQuery('❌ لم يتم التحقق من اشتراكك!');
       await ctx.reply(notSubscribedMessage());
       return;
     }
   } catch (err) {
-    // getChatMember يرمي خطأ فقط عندما البوت لا يملك صلاحية الوصول للقناة
-    // (وليس بسبب عدم اشتراك المستخدم) — نكمل ونعطي النقاط
-    console.warn(`⚠️ تعذّر التحقق من عضوية القناة ${tag}:`, err instanceof Error ? err.message : err);
+    // getChatMember يفشل عندما البوت غير مضاف كعضو في القناة
+    // في هذه الحالة لا نعطي نقاط ولا نرفض — بل نخبر المستخدم
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`⚠️ getChatMember فشل للقناة ${tag}: ${msg}`);
+    await ctx.answerCbQuery('⚠️ تعذّر التحقق من اشتراكك حالياً. حاول مجدداً بعد قليل.');
+    return;
   }
 
   if (!await completeTask(user.id, channelId)) {
@@ -219,16 +221,17 @@ export async function handleCheckCampaign(ctx: Context, campaignId: number): Pro
 
   try {
     const member = await ctx.telegram.getChatMember(tag, from.id);
-    // إذا رجع البوت بـ left أو kicked فالمستخدم غير مشترك فعلاً
     if (member.status === 'left' || member.status === 'kicked') {
       await ctx.answerCbQuery('❌ لم يتم التحقق من اشتراكك!');
       await ctx.reply(notSubscribedMessage());
       return;
     }
   } catch (err) {
-    // getChatMember يرمي خطأ فقط عندما البوت لا يملك صلاحية الوصول للقناة
-    // (وليس بسبب عدم اشتراك المستخدم) — نكمل ونعطي النقاط
-    console.warn(`⚠️ تعذّر التحقق من عضوية الحملة ${tag}:`, err instanceof Error ? err.message : err);
+    // getChatMember يفشل عندما البوت غير مضاف كعضو في قناة الحملة
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`⚠️ getChatMember فشل للحملة ${tag}: ${msg}`);
+    await ctx.answerCbQuery('⚠️ تعذّر التحقق من اشتراكك حالياً. حاول مجدداً بعد قليل.');
+    return;
   }
 
   const { success, campaignCompleted } = await recordCampaignSubscription(user.id, campaignId);

@@ -122,7 +122,13 @@ export async function handleAdminCallback(ctx: Context, action: string): Promise
 
     case 'admin_add_channel':
       adminStates.set(from.id, { step: 'add_channel_username' });
-      await ctx.editMessageText('➕ إضافة قناة\n\nأرسل معرّف القناة (مثال: @channelname أو t.me/channelname)\n\n/cancel للإلغاء.');
+      await ctx.editMessageText(
+        '➕ إضافة قناة\n\n' +
+        '⚠️ شرط مهم قبل الإضافة:\n' +
+        'يجب أن يكون البوت مضافاً كعضو (مشترك) في القناة حتى يتمكن من التحقق من اشتراك المستخدمين.\n\n' +
+        'أرسل معرّف القناة (مثال: @channelname أو t.me/channelname)\n\n' +
+        '/cancel للإلغاء.'
+      );
       break;
 
     case 'admin_list_channels': {
