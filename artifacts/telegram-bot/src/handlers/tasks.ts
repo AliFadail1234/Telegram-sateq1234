@@ -170,16 +170,16 @@ export async function handleCheckChannel(ctx: Context, channelId: number): Promi
 
   try {
     const member = await ctx.telegram.getChatMember(tag, from.id);
-    if (!['member', 'administrator', 'creator'].includes(member.status)) {
+    // إذا رجع البوت بـ left أو kicked فالمستخدم غير مشترك فعلاً
+    if (member.status === 'left' || member.status === 'kicked') {
       await ctx.answerCbQuery('❌ لم يتم التحقق من اشتراكك!');
       await ctx.reply(notSubscribedMessage());
       return;
     }
-  } catch {
-    // getChatMember قد يفشل إذا كان المستخدم غير مشترك — نعامله كعدم اشتراك
-    await ctx.answerCbQuery('❌ لم يتم التحقق من اشتراكك!');
-    await ctx.reply(notSubscribedMessage());
-    return;
+  } catch (err) {
+    // getChatMember يرمي خطأ فقط عندما البوت لا يملك صلاحية الوصول للقناة
+    // (وليس بسبب عدم اشتراك المستخدم) — نكمل ونعطي النقاط
+    console.warn(`⚠️ تعذّر التحقق من عضوية القناة ${tag}:`, err instanceof Error ? err.message : err);
   }
 
   if (!await completeTask(user.id, channelId)) {
@@ -219,16 +219,16 @@ export async function handleCheckCampaign(ctx: Context, campaignId: number): Pro
 
   try {
     const member = await ctx.telegram.getChatMember(tag, from.id);
-    if (!['member', 'administrator', 'creator'].includes(member.status)) {
+    // إذا رجع البوت بـ left أو kicked فالمستخدم غير مشترك فعلاً
+    if (member.status === 'left' || member.status === 'kicked') {
       await ctx.answerCbQuery('❌ لم يتم التحقق من اشتراكك!');
       await ctx.reply(notSubscribedMessage());
       return;
     }
-  } catch {
-    // getChatMember قد يفشل إذا كان المستخدم غير مشترك — نعامله كعدم اشتراك
-    await ctx.answerCbQuery('❌ لم يتم التحقق من اشتراكك!');
-    await ctx.reply(notSubscribedMessage());
-    return;
+  } catch (err) {
+    // getChatMember يرمي خطأ فقط عندما البوت لا يملك صلاحية الوصول للقناة
+    // (وليس بسبب عدم اشتراك المستخدم) — نكمل ونعطي النقاط
+    console.warn(`⚠️ تعذّر التحقق من عضوية الحملة ${tag}:`, err instanceof Error ? err.message : err);
   }
 
   const { success, campaignCompleted } = await recordCampaignSubscription(user.id, campaignId);
