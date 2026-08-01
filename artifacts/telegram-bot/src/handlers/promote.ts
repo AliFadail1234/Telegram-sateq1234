@@ -19,6 +19,7 @@ import {
   campaignConfirmKeyboard,
   mainMenuKeyboard,
 } from '../utils/keyboards.js';
+import { getActivePricingTiers } from '../config/pricing.js';
 
 type PromoteState =
   | { step: 'waiting_channel' }
@@ -93,9 +94,12 @@ export async function handlePromoteChannelInput(ctx: Context, rawInput: string):
 
   await ctx.telegram.deleteMessage(from.id, verifyMsg.message_id).catch(() => null);
 
-  const keyboard = subscriberChoiceKeyboard(user.points);
+  // جلب جداول التسعير الديناميكية
+  const tiers = await getActivePricingTiers();
+  const keyboard = subscriberChoiceKeyboard(user.points, tiers);
   if (!keyboard) {
-    await ctx.reply(insufficientPointsMessage(user.points, 10));
+    const minPoints = tiers.length > 0 ? tiers[0].points : 10;
+    await ctx.reply(insufficientPointsMessage(user.points, minPoints));
     clearPromoteState(from.id);
     return;
   }
