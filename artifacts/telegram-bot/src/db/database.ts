@@ -70,6 +70,20 @@ export async function initDatabase(): Promise<void> {
       claimed_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE(user_id, claimed_date)
     );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // تهيئة القيم الافتراضية للإعدادات إن لم تكن موجودة
+  await pool.query(`
+    INSERT INTO settings (key, value) VALUES
+      ('campaign_points', '1'),
+      ('pricing_tiers', '[{"subscribers":5,"points":10,"label":"5 مشتركين  — 10 نقاط"},{"subscribers":10,"points":20,"label":"10 مشتركين — 20 نقطة"},{"subscribers":20,"points":40,"label":"20 مشتركاً — 40 نقطة"},{"subscribers":50,"points":100,"label":"50 مشتركاً — 100 نقطة"}]')
+    ON CONFLICT (key) DO NOTHING;
   `);
 
   console.log('✅ قاعدة البيانات (Supabase) جاهزة.');
