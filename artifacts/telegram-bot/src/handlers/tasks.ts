@@ -21,7 +21,7 @@ import {
   notSubscribedMessage,
 } from '../utils/messages.js';
 import { showEarnMenu } from '../utils/earn_menu.js';
-import { POINTS_PER_CAMPAIGN_SUBSCRIPTION } from '../config/pricing.js';
+import { getCampaignSubscriptionPoints } from '../config/pricing.js';
 
 // ========== تتبع المهام المتخطاة لكل مستخدم ==========
 const skippedChannels = new Map<number, Set<number>>();
@@ -67,10 +67,13 @@ export async function handleEarnTasks(ctx: Context): Promise<void> {
     return;
   }
 
-  const campaign = await getNextPendingCampaign(user.id);
+  const [campaign, campaignPts] = await Promise.all([
+    getNextPendingCampaign(user.id),
+    getCampaignSubscriptionPoints(),
+  ]);
   if (campaign) {
     await ctx.editMessageText(
-      campaignTaskMessage(campaign),
+      campaignTaskMessage(campaign, campaignPts),
       { reply_markup: channelTaskKeyboard(campaign.channel_username, campaign.id, 'campaign').reply_markup },
     );
     return;
@@ -107,10 +110,13 @@ export async function handleSkipChannel(ctx: Context, channelId: number): Promis
   }
 
   // البحث عن حملة
-  const nextCampaign = await getNextPendingCampaign(user.id, excludedCampaigns);
+  const [nextCampaign, campaignPts] = await Promise.all([
+    getNextPendingCampaign(user.id, excludedCampaigns),
+    getCampaignSubscriptionPoints(),
+  ]);
   if (nextCampaign) {
     await ctx.editMessageText(
-      campaignTaskMessage(nextCampaign),
+      campaignTaskMessage(nextCampaign, campaignPts),
       { reply_markup: channelTaskKeyboard(nextCampaign.channel_username, nextCampaign.id, 'campaign').reply_markup },
     );
     return;
@@ -136,10 +142,13 @@ export async function handleSkipCampaign(ctx: Context, campaignId: number): Prom
   const excludedCampaigns = [...getSkippedCampaigns(from.id)];
 
   // البحث عن حملة أخرى
-  const nextCampaign = await getNextPendingCampaign(user.id, excludedCampaigns);
+  const [nextCampaign, campaignPts] = await Promise.all([
+    getNextPendingCampaign(user.id, excludedCampaigns),
+    getCampaignSubscriptionPoints(),
+  ]);
   if (nextCampaign) {
     await ctx.editMessageText(
-      campaignTaskMessage(nextCampaign),
+      campaignTaskMessage(nextCampaign, campaignPts),
       { reply_markup: channelTaskKeyboard(nextCampaign.channel_username, nextCampaign.id, 'campaign').reply_markup },
     );
     return;
@@ -176,8 +185,6 @@ export async function handleCheckChannel(ctx: Context, channelId: number): Promi
       return;
     }
   } catch (err) {
-    // getChatMember يفشل عندما البوت غير مضاف كعضو في القناة
-    // في هذه الحالة لا نعطي نقاط ولا نرفض — بل نخبر المستخدم
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`⚠️ getChatMember فشل للقناة ${tag}: ${msg}`);
     await ctx.answerCbQuery('⚠️ تعذّر التحقق من اشتراكك حالياً. حاول مجدداً بعد قليل.');
@@ -227,7 +234,6 @@ export async function handleCheckCampaign(ctx: Context, campaignId: number): Pro
       return;
     }
   } catch (err) {
-    // getChatMember يفشل عندما البوت غير مضاف كعضو في قناة الحملة
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`⚠️ getChatMember فشل للحملة ${tag}: ${msg}`);
     await ctx.answerCbQuery('⚠️ تعذّر التحقق من اشتراكك حالياً. حاول مجدداً بعد قليل.');
@@ -239,14 +245,15 @@ export async function handleCheckCampaign(ctx: Context, campaignId: number): Pro
     await ctx.answerCbQuery('✅ اشتركت في هذه الحملة مسبقاً!'); return;
   }
 
-  await addPoints(user.id, POINTS_PER_CAMPAIGN_SUBSCRIPTION);
+  const pointsEarned = await getCampaignSubscriptionPoints();
+  await addPoints(user.id, pointsEarned);
   const updated = (await getUserById(user.id))!;
 
   await ctx.answerCbQuery('✅ تم تسجيل اشتراكك!');
 
   const completedNote = campaignCompleted ? '\n\n🎉 اكتملت هذه الحملة!' : '';
   await ctx.editMessageText(
-    taskCompletedMessage(campaign.channel_name, POINTS_PER_CAMPAIGN_SUBSCRIPTION, updated.points) + completedNote,
+    taskCompletedMessage(campaign.channel_name, pointsEarned, updated.points) + completedNote,
     { reply_markup: { inline_keyboard: [[{ text: '⭐ المهمة التالية', callback_data: 'earn_tasks' }], [{ text: '🔙 القائمة', callback_data: 'earn_menu' }]] } },
   );
 }
