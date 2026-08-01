@@ -1,4 +1,5 @@
 import type { User, Channel, Campaign } from '../db/queries.js';
+import type { PricingTier } from '../config/pricing.js';
 
 // ===== الترحيب =====
 
@@ -25,10 +26,10 @@ export function channelTaskMessage(channel: Channel): string {
 
 // ===== مهام الحملات =====
 
-export function campaignTaskMessage(campaign: Campaign): string {
+export function campaignTaskMessage(campaign: Campaign, pointsReward = 1): string {
   const u = campaign.channel_username.startsWith('@') ? campaign.channel_username : `@${campaign.channel_username}`;
   const remaining = campaign.target_subscribers - campaign.completed_subscribers;
-  return `⭐ مهمة — اشتراك في قناة\n\n📢 القناة: ${campaign.channel_name}\n🔗 المعرّف: ${u}\n💰 المكافأة: 1 نقطة\n📊 متبقي: ${remaining} مشترك\n\nاشترك ثم اضغط تحقق.`;
+  return `⭐ مهمة — اشتراك في قناة\n\n📢 القناة: ${campaign.channel_name}\n🔗 المعرّف: ${u}\n💰 المكافأة: ${pointsReward} نقطة\n📊 متبقي: ${remaining} مشترك\n\nاشترك ثم اضغط تحقق.`;
 }
 
 export function noTasksMessage(): string {
@@ -103,6 +104,11 @@ export function adminCampaignInfoMessage(campaign: Campaign): string {
   const progress = Math.round((campaign.completed_subscribers / campaign.target_subscribers) * 100);
   const bar = '█'.repeat(Math.floor(progress / 10)) + '░'.repeat(10 - Math.floor(progress / 10));
   return `🎯 حملة #${campaign.id}\n\n📢 القناة: @${campaign.channel_username}\n📛 الاسم: ${campaign.channel_name}\n👥 المستهدف: ${campaign.target_subscribers}\n✅ المنفّذ: ${campaign.completed_subscribers}\n📊 التقدم: ${bar} ${progress}%\n💰 النقاط المدفوعة: ${campaign.points_paid}\n🔄 الحالة: ${statusLabel(campaign.status)}\n📅 ${campaign.created_at}`;
+}
+
+export function adminPricingMessage(subPoints: number, tiers: PricingTier[]): string {
+  const tierLines = tiers.map(t => `  • ${t.subscribers} مشتركين ← ${t.points} نقطة`).join('\n');
+  return `⚙️ إعدادات التسعير\n\n💰 نقاط الاشتراك في الحملة: ${subPoints} نقطة\n(المبلغ الذي يحصل عليه المستخدم مقابل كل اشتراك)\n\n📊 جداول التمويل:\n${tierLines}\n(تكلفة الترويج بالنقاط لصاحب القناة)\n\nاختر ما تريد تعديله:`;
 }
 
 function statusLabel(status: string): string {
