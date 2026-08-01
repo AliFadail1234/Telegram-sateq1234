@@ -23,6 +23,7 @@ import {
   adminStatsMessage,
   adminUserInfoMessage,
   adminCampaignInfoMessage,
+  adminPricingMessage,
 } from '../utils/messages.js';
 import {
   adminMenuKeyboard,
@@ -31,7 +32,14 @@ import {
   adminCampaignsKeyboard,
   adminBackKeyboard,
   adminCampaignActionsKeyboard,
+  adminPricingKeyboard,
 } from '../utils/keyboards.js';
+import {
+  getCampaignSubscriptionPoints,
+  getActivePricingTiers,
+  saveCampaignSubscriptionPoints,
+  savePricingTiers,
+} from '../config/pricing.js';
 
 const ADMIN_ID = parseInt(process.env.ADMIN_ID ?? '0', 10);
 
@@ -47,7 +55,9 @@ type AdminState =
   | { step: 'delete_channel_id' }
   | { step: 'edit_channel_id' }
   | { step: 'edit_channel_points'; channelId: number }
-  | { step: 'search_user' };
+  | { step: 'search_user' }
+  | { step: 'edit_sub_points' }
+  | { step: 'edit_tier_cost'; tierIndex: number; tierSubscribers: number };
 
 const adminStates = new Map<number, AdminState>();
 
@@ -108,6 +118,17 @@ export async function handleAdminCallback(ctx: Context, action: string): Promise
       return;
     }
     await ctx.editMessageText(adminCampaignInfoMessage(campaign), adminCampaignActionsKeyboard(id, campaign.status));
+    return;
+  }
+
+  if (action.startsWith('admin_edit_tier_')) {
+    const idx = parseInt(action.replace('admin_edit_tier_', ''), 10);
+    const tiers = await getActivePricingTiers();
+    if (isNaN(idx) || idx >= tiers.length) return;
+    adminStates.set(from.id, { step: 'edit_tier_cost', tierIndex: idx, tierSubscribers: tiers[idx].subscribers });
+    await ctx.editMessageText(
+      `✏️ تعديل سعر الفئة: ${tiers[idx].subscribers} مشتركين\n\nالسعر الحالي: ${tiers[idx].points} نقطة\n\nأرسل السعر الجديد بالنقاط:\n\n/cancel للإلغاء.`
+    );
     return;
   }
 
@@ -218,6 +239,22 @@ export async function handleAdminCallback(ctx: Context, action: string): Promise
       await ctx.editMessageText(adminStatsMessage(users, tasks, channels, campaigns, points), adminBackKeyboard);
       break;
     }
+
+    case 'admin_pricing': {
+      const [subPts, tiers] = await Promise.all([
+        getCampaignSubscriptionPoints(),
+        getActivePricingTiers(),
+      ]);
+      await ctx.editMessageText(adminPricingMessage(subPts, tiers), adminPricingKeyboard(tiers));
+      break;
+    }
+
+    case 'admin_edit_sub_points':
+      adminStates.set(from.id, { step: 'edit_sub_points' });
+      await ctx.editMessageText(
+        '✏️ تعديل نقاط الاشتراك في الحملة\n\n(النقاط التي يحصل عليها المستخدم مقابل كل اشتراك في قناة ترويجية)\n\nأرسل العدد الجديد:\n\n/cancel للإلغاء.'
+      );
+      break;
   }
 }
 
@@ -290,6 +327,33 @@ export async function handleAdminTextInput(ctx: Context, text: string): Promise<
       if (!user) { await ctx.reply('❌ لم يُعثر على المستخدم.', adminMenuKeyboard); return true; }
       const count = await getUserCompletedTasksCount(user.id);
       await ctx.reply(adminUserInfoMessage(user, count), adminMenuKeyboard);
+      return true;
+    }
+
+    case 'edit_sub_points': {
+      const pts = parseInt(text, 10);
+      if (isNaN(pts) || pts < 1) { await ctx.reply('⚠️ أدخل رقماً أكبر من صفر:'); return true; }
+      await saveCampaignSubscriptionPoints(pts);
+      clearAdminState(from.id);
+      await ctx.reply(`✅ تم تحديث نقاط الاشتراك في الحملة إلى ${pts} نقطة.\n\nسيحصل المستخدمون على ${pts} نقطة مقابل كل اشتراك في حملة.`, adminMenuKeyboard);
+      return true;
+    }
+
+    case 'edit_tier_cost': {
+      const pts = parseInt(text, 10);
+      if (isNaN(pts) || pts < 1) { await ctx.reply('⚠️ أدخل رقماً أكبر من صفر:'); return true; }
+      const tiers = await getActivePricingTiers();
+      const idx = state.tierIndex;
+      if (idx < tiers.length) {
+        tiers[idx] = {
+          ...tiers[idx],
+          points: pts,
+          label: `${tiers[idx].subscribers} مشتركين — ${pts} نقطة`,
+        };
+        await savePricingTiers(tiers);
+      }
+      clearAdminState(from.id);
+      await ctx.reply(`✅ تم تحديث سعر ${state.tierSubscribers} مشتركين إلى ${pts} نقطة.`, adminMenuKeyboard);
       return true;
     }
   }
