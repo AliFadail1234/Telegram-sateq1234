@@ -1,5 +1,5 @@
 import { Markup } from 'telegraf';
-import { PRICING_TIERS } from '../config/pricing.js';
+import type { PricingTier } from '../config/pricing.js';
 
 // ===== القائمة الرئيسية =====
 
@@ -14,6 +14,7 @@ export const adminMenuKeyboard = Markup.inlineKeyboard([
   [Markup.button.callback('📢 إدارة القنوات', 'admin_channels')],
   [Markup.button.callback('🎯 إدارة الحملات', 'admin_campaigns')],
   [Markup.button.callback('👥 إدارة المستخدمين', 'admin_users')],
+  [Markup.button.callback('⚙️ إعدادات التسعير', 'admin_pricing')],
   [Markup.button.callback('📊 الإحصائيات', 'admin_stats')],
 ]);
 
@@ -39,6 +40,19 @@ export const adminBackKeyboard = Markup.inlineKeyboard([
   [Markup.button.callback('🔙 رجوع للقائمة', 'admin_back')],
 ]);
 
+// ===== لوحة التسعير =====
+
+export function adminPricingKeyboard(tiers: PricingTier[]) {
+  const tierBtns = tiers.map((t, i) => [
+    Markup.button.callback(`✏️ ${t.subscribers} مشتركين ← ${t.points} نقطة`, `admin_edit_tier_${i}`),
+  ]);
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('✏️ تعديل نقاط الاشتراك في الحملة', 'admin_edit_sub_points')],
+    ...tierBtns,
+    [Markup.button.callback('🔙 رجوع', 'admin_back')],
+  ]);
+}
+
 // ===== مهام الاشتراك =====
 
 export function channelTaskKeyboard(channelUsername: string, itemId: number, itemType: 'channel' | 'campaign') {
@@ -54,8 +68,8 @@ export function channelTaskKeyboard(channelUsername: string, itemId: number, ite
 
 // ===== اختيار عدد المشتركين =====
 
-export function subscriberChoiceKeyboard(userPoints: number) {
-  const rows = PRICING_TIERS
+export function subscriberChoiceKeyboard(userPoints: number, tiers: PricingTier[]) {
+  const rows = tiers
     .filter(tier => tier.points <= userPoints)
     .map(tier => [Markup.button.callback(tier.label, `promote_choose_${tier.subscribers}_${tier.points}`)]);
 
