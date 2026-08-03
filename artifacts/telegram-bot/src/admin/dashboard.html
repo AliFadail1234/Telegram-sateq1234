@@ -128,6 +128,27 @@
   }
   .form-group input:focus { outline: none; border-color: var(--accent); }
 
+  /* ===== إعدادات التسعير ===== */
+  .pricing-form { padding: 20px; }
+  .pricing-intro { color: var(--muted); font-size: 13px; line-height: 1.7; margin-bottom: 20px; }
+  .pricing-main-field { max-width: 360px; margin-bottom: 24px; }
+  .pricing-main-field input, .pricing-row input {
+    width: 100%; padding: 9px 12px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 7px; color: var(--text); font-size: 14px;
+  }
+  .pricing-main-field input:focus, .pricing-row input:focus { outline: none; border-color: var(--accent); }
+  .pricing-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .pricing-table { width: 100%; max-width: 700px; border-collapse: collapse; margin-bottom: 20px; }
+  .pricing-table th, .pricing-table td { text-align: right; }
+  .pricing-row input { max-width: 160px; }
+  .pricing-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .save-pricing-btn {
+    background: var(--accent); color: #fff; padding: 9px 20px; border: none;
+    border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;
+  }
+  .save-pricing-btn:hover { background: var(--accent2); }
+  .pricing-status { color: var(--muted); font-size: 13px; }
+
   /* ===== بحث ===== */
   .search-bar {
     padding: 9px 14px; background: var(--bg); border: 1px solid var(--border);
@@ -175,6 +196,8 @@
     .search-bar { width: 100%; }
     .section-header { flex-direction: column; align-items: flex-start; gap: 10px; }
     .section-header h3 { font-size: 14px; }
+     .pricing-form { padding: 14px; }
+     .pricing-table { min-width: 0; }
 
     /* صندوق تسجيل الدخول */
     .login-box { width: calc(100% - 32px); padding: 28px 20px; }
@@ -215,6 +238,7 @@
     <button class="nav-btn" onclick="showTab('channels', this)">📢 القنوات</button>
     <button class="nav-btn" onclick="showTab('campaigns', this)">🎯 الحملات</button>
     <button class="nav-btn" onclick="showTab('users', this)">👥 المستخدمون</button>
+   <button class="nav-btn" onclick="showTab('pricing', this)">⚙️ التسعير</button>
   </div>
   <div class="content">
 
@@ -275,6 +299,16 @@
       </div>
     </div>
 
+    <!-- ===== التسعير ===== -->
+    <div id="tab-pricing" style="display:none">
+      <div class="section">
+        <div class="section-header"><h3>إعدادات التسعير</h3></div>
+        <div id="pricing-body">
+          <div class="loading">⏳ جاري التحميل...</div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -326,7 +360,7 @@ async function apiFetch(path, opts = {}) {
 
 // ===== تبويبات =====
 function showTab(name, btn) {
-  ['stats', 'channels', 'campaigns', 'users'].forEach(t => {
+  ['stats', 'channels', 'campaigns', 'users', 'pricing'].forEach(t => {
     document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -335,6 +369,7 @@ function showTab(name, btn) {
   if (name === 'channels') loadChannels();
   if (name === 'campaigns') loadCampaigns();
   if (name === 'users') loadUsers();
+  if (name === 'pricing') loadPricing();
 }
 
 function toggleForm(id) {
@@ -489,6 +524,72 @@ async function saveUserPoints(userId) {
   const r = await apiFetch('/admin/api/users/' + userId + '/points', { method: 'PATCH', body: JSON.stringify({ points: pts }) });
   if (r.ok) toast('✅ تم تحديث النقاط');
   else toast('❌ فشل التحديث');
+}
+
+// ===== التسعير =====
+async function loadPricing() {
+  const r = await apiFetch('/admin/api/pricing');
+  if (!r.ok) { document.getElementById('pricing-body').innerHTML = '<div class="empty">تعذّر تحميل إعدادات التسعير</div>'; return; }
+  const d = await r.json();
+  const tiers = Array.isArray(d.tiers) ? d.tiers : [];
+  document.getElementById('pricing-body').innerHTML = `
+    <div class="pricing-form">
+      <p class="pricing-intro">
+        عدّل عدد النقاط التي يحصل عليها المستخدم مقابل الاشتراك في حملة، وأسعار تمويل المشتركين.
+        سيتم استخدام القيم الجديدة مباشرة في البوت بعد الحفظ.
+      </p>
+      <div class="pricing-main-field">
+        <label class="pricing-label" for="campaign-points">النقاط مقابل كل اشتراك في حملة</label>
+        <input type="number" id="campaign-points" min="1" step="1" value="${Number(d.campaignPoints) || 1}">
+      </div>
+      <table class="pricing-table">
+        <tr><th>عدد الأعضاء المطلوبين</th><th>التكلفة بالنقاط</th></tr>
+        ${tiers.map((tier, index) => `
+          <tr class="pricing-row">
+            <td><strong>${Number(tier.subscribers)}</strong> عضو</td>
+            <td><input type="number" min="1" step="1" data-pricing-index="${index}" value="${Number(tier.points) || 1}"></td>
+          </tr>
+        `).join('')}
+      </table>
+      <div class="pricing-actions">
+        <button class="save-pricing-btn" onclick="savePricing()">حفظ إعدادات التسعير</button>
+        <span class="pricing-status" id="pricing-status"></span>
+      </div>
+    </div>
+  `;
+}
+
+async function savePricing() {
+  const campaignPoints = parseInt(document.getElementById('campaign-points').value, 10);
+  const inputs = [...document.querySelectorAll('[data-pricing-index]')];
+  const tiers = inputs.map(input => {
+    const index = Number(input.dataset.pricingIndex);
+    return {
+      subscribers: Number(input.closest('tr').querySelector('td strong').textContent),
+      points: parseInt(input.value, 10),
+      index,
+    };
+  }).sort((a, b) => a.index - b.index).map(({ subscribers, points }) => ({ subscribers, points }));
+
+  if (!Number.isInteger(campaignPoints) || campaignPoints < 1 || tiers.some(tier => !Number.isInteger(tier.points) || tier.points < 1)) {
+    toast('أدخل قيماً صحيحة أكبر من صفر');
+    return;
+  }
+
+  const status = document.getElementById('pricing-status');
+  status.textContent = 'جاري الحفظ...';
+  const r = await apiFetch('/admin/api/pricing', {
+    method: 'PUT',
+    body: JSON.stringify({ campaignPoints, tiers }),
+  });
+  if (r.ok) {
+    status.textContent = 'تم الحفظ بنجاح';
+    toast('✅ تم تحديث إعدادات التسعير');
+  } else {
+    const error = await r.json().catch(() => ({}));
+    status.textContent = '';
+    toast('❌ ' + (error.error || 'فشل حفظ الإعدادات'));
+  }
 }
 
 // ===== Toast =====

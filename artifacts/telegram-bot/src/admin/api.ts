@@ -19,6 +19,12 @@ import {
   getAllUsers,
   setUserPoints,
 } from '../db/queries.js';
+import {
+  getCampaignSubscriptionPoints,
+  getActivePricingTiers,
+  saveCampaignSubscriptionPoints,
+  savePricingTiers,
+} from '../config/pricing.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_HTML = path.join(__dirname, 'dashboard.html');
@@ -106,6 +112,67 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
   // ===== المستخدمون =====
   if (apiPath === '/users' && method === 'GET') {
     json(res, 200, await getAllUsers(200));
+    return true;
+  }
+
+  // ===== التسعير =====
+  if (apiPath === '/pricing' && method === 'GET') {
+    const [campaignPoints, tiers] = await Promise.all([
+      getCampaignSubscriptionPoints(),
+      getActivePricingTiers(),
+    ]);
+    json(res, 200, { campaignPoints, tiers });
+    return true;
+  }
+
+  if (apiPath === '/pricing' && method === 'PUT') {
+    const body = await readBody(req);
+    const campaignPoints = Number(body['campaignPoints']);
+    const rawTiers = body['tiers'];
+
+    if (!Number.isInteger(campaignPoints) || campaignPoints < 1) {
+      json(res, 400, { error: 'قيمة نقاط الاشتراك غير صحيحة' });
+      return true;
+    }
+
+    if (!Array.isArray(rawTiers) || rawTiers.length === 0 || rawTiers.length > 20) {
+      json(res, 400, { error: 'يجب إدخال جدول تسعير واحد على الأقل' });
+      return true;
+    }
+
+    const seenSubscribers = new Set<number>();
+    const tiers = [];
+    for (const rawTier of rawTiers) {
+      if (!rawTier || typeof rawTier !== 'object') {
+        json(res, 400, { error: 'بيانات جدول التسعير غير صحيحة' });
+        return true;
+      }
+
+      const tier = rawTier as Record<string, unknown>;
+      const subscribers = Number(tier['subscribers']);
+      const points = Number(tier['points']);
+      if (
+        !Number.isInteger(subscribers) ||
+        subscribers < 1 ||
+        !Number.isInteger(points) ||
+        points < 1 ||
+        seenSubscribers.has(subscribers)
+      ) {
+        json(res, 400, { error: 'تحقق من أعداد المشتركين والنقاط وتأكد من عدم تكرار الفئات' });
+        return true;
+      }
+
+      seenSubscribers.add(subscribers);
+      tiers.push({
+        subscribers,
+        points,
+        label: `${subscribers} مشتركين — ${points} نقطة`,
+      });
+    }
+
+    await saveCampaignSubscriptionPoints(campaignPoints);
+    await savePricingTiers(tiers);
+    json(res, 200, { ok: true, campaignPoints, tiers });
     return true;
   }
 

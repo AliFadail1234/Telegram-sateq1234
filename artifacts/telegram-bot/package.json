@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx --dns-result-order=ipv4first watch src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "start": "tsx --dns-result-order=ipv4first src/index.ts",
     "typecheck": "tsc --noEmit"
   },
