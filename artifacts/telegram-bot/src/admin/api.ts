@@ -80,7 +80,10 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
       const html = fs.readFileSync(DASHBOARD_HTML, 'utf8');
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
-    } catch {
+    } catch (err) {
+      // Log the error to help diagnose why the dashboard file cannot be read in production
+      // (e.g. missing file, wrong path, build step not including the file).
+      console.error('Failed to read dashboard.html:', err);
       res.writeHead(500);
       res.end('Dashboard not found');
     }
