@@ -30,8 +30,17 @@ server.listen(PORT, () => {
 bot.launch({
   dropPendingUpdates: true,
 }).catch((err: unknown) => {
-  console.error('❌ خطأ في البوت:', err);
-  process.exit(1);
+  // لا ننهي العملية تلقائياً عند وجود تصادم 409 بسبب وجود مثيل آخر للـ getUpdates
+  // (حالة شائعة عند إعادة التشغيل أو تشغيل أكثر من نسخة). بدلاً من الخروج، نطبع تحذيراً
+  // ونترك الخادم يعمل حتى تتمكن من إعادة النشر أو حل مشكلة التكوين.
+  const anyErr = err as any;
+  if (anyErr && anyErr.response && anyErr.response.error_code === 409) {
+    console.warn('⚠️ تحذير: خطأ Telegram 409 — يوجد مثيل آخر يقوم بالاستطلاع (getUpdates). لن أنهِ العملية.');
+    console.warn('تفاصيل:', anyErr.response.description || anyErr);
+  } else {
+    console.error('❌ خطأ في البوت:', err);
+    process.exit(1);
+  }
 });
 
 console.log('✅ البوت يعمل الآن!');
