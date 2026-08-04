@@ -1,6 +1,6 @@
 // ============================================================
 // نظام التسعير — القيم الثابتة كـ fallback
-// للتعديل الديناميكي استخدم دوال getCampaignSubscriptionPoints / getActivePricingTiers
+// للتعديل الديناميكي استخدم دوال getPointsPerMember / getActivePricingTiers
 // ============================================================
 
 import { getSetting, setSetting } from '../db/queries.js';
@@ -41,7 +41,18 @@ export async function getCampaignSubscriptionPoints(): Promise<number> {
   return POINTS_PER_CAMPAIGN_SUBSCRIPTION;
 }
 
-/** جداول التسعير النشطة (من DB أو الافتراضية) */
+/** نقاط لكل عضو (التكلفة لكل عضو) — جديد */
+export async function getPointsPerMember(): Promise<number> {
+  const val = await getSetting('points_per_member');
+  if (val) {
+    const n = parseInt(val, 10);
+    if (!isNaN(n) && n > 0) return n;
+  }
+  // افتراضيًا نستخدم نفس قيمة نقاط الاشتراك لكل حملة إن لم يحدد المدير خلاف ذلك
+  return POINTS_PER_CAMPAIGN_SUBSCRIPTION;
+}
+
+/** جداول التسعي�� النشطة (من DB أو الافتراضي) */
 export async function getActivePricingTiers(): Promise<PricingTier[]> {
   const val = await getSetting('pricing_tiers');
   if (val) {
@@ -56,6 +67,11 @@ export async function getActivePricingTiers(): Promise<PricingTier[]> {
 /** حفظ نقاط الاشتراك في حملة */
 export async function saveCampaignSubscriptionPoints(points: number): Promise<void> {
   await setSetting('campaign_points', String(points));
+}
+
+/** حفظ نقاط لكل عضو */
+export async function savePointsPerMember(points: number): Promise<void> {
+  await setSetting('points_per_member', String(points));
 }
 
 /** حفظ جداول التسعير */
