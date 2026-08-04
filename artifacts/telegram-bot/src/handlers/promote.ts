@@ -18,12 +18,14 @@ import {
   subscriberChoiceKeyboard,
   campaignConfirmKeyboard,
   mainMenuKeyboard,
+  promoteAllOrCustomKeyboard,
 } from '../utils/keyboards.js';
 import { getActivePricingTiers } from '../config/pricing.js';
 
 type PromoteState =
   | { step: 'waiting_channel' }
-  | { step: 'choosing_subscribers'; channelUsername: string; channelName: string };
+  | { step: 'choosing_subscribers'; channelUsername: string; channelName: string }
+  | { step: 'waiting_custom_number'; channelUsername: string; channelName: string };
 
 const promoteStates = new Map<number, PromoteState>();
 
@@ -96,8 +98,21 @@ export async function handlePromoteChannelInput(ctx: Context, rawInput: string):
 
   // جلب جداول التسعير الديناميكية
   const tiers = await getActivePricingTiers();
-  const keyboard = subscriberChoiceKeyboard(user.points, tiers);
-  if (!keyboard) {
+
+  // إذا أردنا عرض خيارات فئات جاهزة للمستخدم كما كانت سابقاً
+  const choiceKeyboard = subscriberChoiceKeyboard(user.points, tiers);
+
+  // حساب أقل سعر لكل مشترك (rate) لاستخدامه في زر "الترويج بكل النقاط"
+  const rates = tiers.map(t => t.points / t.subscribers);
+  const rate = Math.min(...rates);
+  const maxSubs = Math.max(1, Math.floor(user.points / rate));
+  const maxCost = Math.max(1, Math.ceil(maxSubs * rate));
+
+  // استخدم لوحة جديدة تعرض "الترويج بكل النقاط" و"أدخل عدد الأعضاء"
+  const allOrCustom = promoteAllOrCustomKeyboard(channelTag, maxSubs, maxCost);
+
+  // إذا لم يكن لدى المستخدم نقاط كافية لأي فئة
+  if (!choiceKeyboard && (!allOrCustom)) {
     const minPoints = tiers.length > 0 ? tiers[0].points : 10;
     await ctx.reply(insufficientPointsMessage(user.points, minPoints));
     clearPromoteState(from.id);
@@ -105,7 +120,8 @@ export async function handlePromoteChannelInput(ctx: Context, rawInput: string):
   }
 
   promoteStates.set(from.id, { step: 'choosing_subscribers', channelUsername: channelTag, channelName });
-  await ctx.reply(promoteChooseSubscribersMessage(channelName, channelTag, user.points), keyboard);
+  // أرسل رسالة الاختيار (نستخدم النص الموجود سابقًا)
+  await ctx.reply(promoteChooseSubscribersMessage(channelName, channelTag, user.points), allOrCustom || choiceKeyboard);
 }
 
 export async function handlePromoteChoose(ctx: Context, targetSubs: number, cost: number): Promise<void> {
@@ -133,12 +149,105 @@ export async function handlePromoteChoose(ctx: Context, targetSubs: number, cost
   );
 }
 
-export async function handlePromoteConfirm(ctx: Context, targetSubs: number, cost: number, channelUsername: string): Promise<void> {
+export async function handlePromoteAll(ctx: Context, targetSubs: number, cost: number, channelUsername: string): Promise<void> {
   const from = ctx.from;
   if (!from) return;
 
   const state = promoteStates.get(from.id);
   if (!state || state.step !== 'choosing_subscribers') {
+    await ctx.answerCbQuery('⚠️ انتهت الجلسة. ابدأ من جديد.');
+    return;
+  }
+
+  const user = await getUserByTelegramId(from.id);
+  if (!user) return;
+
+  if (user.points < cost) {
+    await ctx.answerCbQuery('❌ نقاطك غير كافية!', { show_alert: true });
+    return;
+  }
+
+  await ctx.answerCbQuery();
+
+  const deducted = await deductPoints(user.id, cost);
+  if (!deducted) {
+    await ctx.answerCbQuery('❌ فشل خصم النقاط!', { show_alert: true });
+    clearPromoteState(from.id);
+    return;
+  }
+
+  const clean = channelUsername.startsWith('@') ? channelUsername.slice(1) : channelUsername;
+  await createCampaign(user.id, clean, state.channelName, targetSubs, cost);
+
+  clearPromoteState(from.id);
+
+  const updatedUser = (await getUserById(user.id))!;
+  await ctx.answerCbQuery('✅ تم إنشاء الحملة!');
+  await ctx.editMessageText(promoteSuccessMessage(state.channelName, targetSubs, cost, updatedUser.points));
+}
+
+export async function handlePromoteCustomStart(ctx: Context, channelUsername: string): Promise<void> {
+  const from = ctx.from;
+  if (!from) return;
+  const state = promoteStates.get(from.id);
+  if (!state || state.step !== 'choosing_subscribers') {
+    await ctx.answerCbQuery('⚠️ انتهت الجلسة. ابدأ من جديد.');
+    return;
+  }
+  await ctx.answerCbQuery();
+  promoteStates.set(from.id, { step: 'waiting_custom_number', channelUsername, channelName: state.channelName });
+  await ctx.reply('✏️ أدخل عدد الأعضاء المرغوب (أو أرسل /cancel للإلغاء):');
+}
+
+export async function handlePromoteCustomInput(ctx: Context, input: string): Promise<void> {
+  const from = ctx.from;
+  if (!from) return;
+  const state = promoteStates.get(from.id);
+  if (!state || state.step !== 'waiting_custom_number') {
+    await ctx.reply('⚠️ انتهت الجلسة. ابدأ من جديد.');
+    return;
+  }
+
+  const user = await getUserByTelegramId(from.id);
+  if (!user) return;
+
+  const n = parseInt(input.trim(), 10);
+  if (isNaN(n) || n < 1) {
+    await ctx.reply('⚠️ أدخل عدداً صحيحاً أكبر من صفر أو /cancel للإلغاء.');
+    return;
+  }
+
+  const tiers = await getActivePricingTiers();
+  const rate = Math.min(...tiers.map(t => t.points / t.subscribers));
+  const cost = Math.max(1, Math.ceil(n * rate));
+
+  if (user.points < cost) {
+    await ctx.reply(insufficientPointsMessage(user.points, cost));
+    clearPromoteState(from.id);
+    return;
+  }
+
+  const deducted = await deductPoints(user.id, cost);
+  if (!deducted) {
+    await ctx.reply('❌ فشل خصم النقاط. حاول لاحقاً.');
+    clearPromoteState(from.id);
+    return;
+  }
+
+  const clean = state.channelUsername.startsWith('@') ? state.channelUsername.slice(1) : state.channelUsername;
+  await createCampaign(user.id, clean, state.channelName, n, cost);
+
+  clearPromoteState(from.id);
+  const updatedUser = (await getUserById(user.id))!;
+  await ctx.reply(promoteSuccessMessage(state.channelName, n, cost, updatedUser.points));
+}
+
+export async function handlePromoteConfirm(ctx: Context, targetSubs: number, cost: number, channelUsername: string): Promise<void> {
+  const from = ctx.from;
+  if (!from) return;
+
+  const state = promoteStates.get(from.id);
+  if (!state || (state.step !== 'choosing_subscribers' && state.step !== 'waiting_custom_number')) {
     await ctx.answerCbQuery('⚠️ انتهت الجلسة. ابدأ من جديد.');
     return;
   }
