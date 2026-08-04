@@ -20,10 +20,12 @@ import {
   setUserPoints,
 } from '../db/queries.js';
 import {
-  getCampaignSubscriptionPoints,
+  // getCampaignSubscriptionPoints,
   getActivePricingTiers,
-  saveCampaignSubscriptionPoints,
+  // saveCampaignSubscriptionPoints,
   savePricingTiers,
+  getPointsPerMember,
+  savePointsPerMember,
 } from '../config/pricing.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -120,21 +122,21 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
 
   // ===== التسعير =====
   if (apiPath === '/pricing' && method === 'GET') {
-    const [campaignPoints, tiers] = await Promise.all([
-      getCampaignSubscriptionPoints(),
+    const [pointsPerMember, tiers] = await Promise.all([
+      getPointsPerMember(),
       getActivePricingTiers(),
     ]);
-    json(res, 200, { campaignPoints, tiers });
+    json(res, 200, { pointsPerMember, tiers });
     return true;
   }
 
   if (apiPath === '/pricing' && method === 'PUT') {
     const body = await readBody(req);
-    const campaignPoints = Number(body['campaignPoints']);
+    const pointsPerMember = Number(body['pointsPerMember']);
     const rawTiers = body['tiers'];
 
-    if (!Number.isInteger(campaignPoints) || campaignPoints < 1) {
-      json(res, 400, { error: 'قيمة نقاط الاشتراك غير صحيحة' });
+    if (!Number.isInteger(pointsPerMember) || pointsPerMember < 1) {
+      json(res, 400, { error: 'قيمة نقاط لكل عضو غير صحيحة' });
       return true;
     }
 
@@ -173,9 +175,9 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
       });
     }
 
-    await saveCampaignSubscriptionPoints(campaignPoints);
+    await savePointsPerMember(pointsPerMember);
     await savePricingTiers(tiers);
-    json(res, 200, { ok: true, campaignPoints, tiers });
+    json(res, 200, { ok: true, pointsPerMember, tiers });
     return true;
   }
 
