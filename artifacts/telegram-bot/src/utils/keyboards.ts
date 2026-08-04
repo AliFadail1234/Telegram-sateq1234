@@ -79,6 +79,16 @@ export function subscriberChoiceKeyboard(userPoints: number, tiers: PricingTier[
   return Markup.inlineKeyboard(rows);
 }
 
+// ===== زر الترويج الكامل أو إدخال عدد مخصص =====
+export function promoteAllOrCustomKeyboard(channelUsername: string, maxSubs: number, cost: number) {
+  const encoded = encodeURIComponent(channelUsername);
+  return Markup.inlineKeyboard([
+    [Markup.button.callback(`🚀 الترويج بكل النقاط — ${maxSubs} عضو (${cost} نقاط)`, `promote_all_${maxSubs}_${cost}_${encoded}`)],
+    [Markup.button.callback('✏️ أدخل عدد الأعضاء', `promote_custom_${encoded}`)],
+    [Markup.button.callback('❌ إلغاء', 'promote_cancel')],
+  ]);
+}
+
 // ===== تأكيد الحملة =====
 
 export function campaignConfirmKeyboard(channelUsername: string, targetSubs: number, cost: number) {
