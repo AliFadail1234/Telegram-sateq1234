@@ -13,6 +13,9 @@ import {
   handlePromoteCancel,
   getPromoteState,
   clearPromoteState,
+  handlePromoteAll,
+  handlePromoteCustomStart,
+  handlePromoteCustomInput,
 } from './promote.js';
 import {
   handleAdmin,
@@ -87,6 +90,25 @@ export function setupHandlers(bot: Telegraf): void {
       return;
     }
 
+    // زر الترويج بكل النقاط: promote_all_{subs}_{cost}_{channel}
+    if (data.startsWith('promote_all_')) {
+      const rest = data.replace('promote_all_', '');
+      const firstUnderscore = rest.indexOf('_');
+      const secondUnderscore = rest.indexOf('_', firstUnderscore + 1);
+      const subs = parseInt(rest.slice(0, firstUnderscore), 10);
+      const cost = parseInt(rest.slice(firstUnderscore + 1, secondUnderscore), 10);
+      const channel = decodeURIComponent(rest.slice(secondUnderscore + 1));
+      await handlePromoteAll(ctx, subs, cost, channel);
+      return;
+    }
+
+    // زر إدخال عدد الأعضاء: promote_custom_{channel}
+    if (data.startsWith('promote_custom_')) {
+      const channel = decodeURIComponent(data.replace('promote_custom_', ''));
+      await handlePromoteCustomStart(ctx, channel);
+      return;
+    }
+
     // تأكيد الحملة: promote_confirm_{subs}_{cost}_{channel}
     if (data.startsWith('promote_confirm_')) {
       const rest = data.replace('promote_confirm_', '');
@@ -152,6 +174,12 @@ export function setupHandlers(bot: Telegraf): void {
         await ctx.reply('🚫 تم الإلغاء.', mainMenuKeyboard);
         return;
       }
+      // إذا ننتظر إدخال عدد مخصص
+      if (promoteState.step === 'waiting_custom_number') {
+        await handlePromoteCustomInput(ctx, text);
+        return;
+      }
+      // حالة إدخال رابط القناة الأولي
       if (promoteState.step === 'waiting_channel') {
         await handlePromoteChannelInput(ctx, text);
         return;
