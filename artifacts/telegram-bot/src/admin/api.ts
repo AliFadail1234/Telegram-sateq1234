@@ -238,7 +238,22 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
     }
   }
 
-  // ===== الحملات =====
+  // ===== حملات (صالح للواجهة القديمة والجديدة) =====
+  if (apiPath === '/campaigns' && method === 'GET') {
+    try {
+      const [active, completed] = await Promise.all([
+        getActiveCampaigns(),
+        getCompletedCampaigns(),
+      ]);
+      json(res, 200, { active, completed });
+    } catch (err) {
+      console.error('Error fetching campaigns:', err);
+      json(res, 500, { error: 'فشل تحميل الحملات' });
+    }
+    return true;
+  }
+
+  // ===== الحملات (مسارات مفصّلة) =====
   if (apiPath === '/campaigns/active' && method === 'GET') {
     json(res, 200, await getActiveCampaigns());
     return true;
