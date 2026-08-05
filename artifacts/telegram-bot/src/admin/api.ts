@@ -30,7 +30,8 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_HTML = path.join(__dirname, 'dashboard.html');
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'admin123';
+// Note: default changed to 'admin' to match the deployed logs; override with ADMIN_PASSWORD env for production
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'admin';
 
 function setCors(res: ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -39,7 +40,15 @@ function setCors(res: ServerResponse): void {
 }
 
 function isAuthorized(req: IncomingMessage): boolean {
-  const auth = req.headers['authorization'] ?? '';
+  // Normalize header to string to avoid array/undefined edge cases
+  const auth = String(req.headers['authorization'] ?? '');
+
+  // Debug helper: enable by setting DEBUG_ADMIN_AUTH=true in env (temporary; logs auth header)
+  if (process.env.DEBUG_ADMIN_AUTH === 'true') {
+    // WARNING: This will log sensitive tokens to stdout. Use only for short-term debugging.
+    console.log('[DEBUG] admin authorization header:', auth);
+  }
+
   if (auth.startsWith('Bearer ')) return auth.slice(7) === ADMIN_PASSWORD;
   if (auth.startsWith('Basic ')) {
     const decoded = Buffer.from(auth.slice(6), 'base64').toString('utf8');
