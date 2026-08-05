@@ -69,7 +69,12 @@
 
   .content { padding: 24px; max-width: 1100px; margin: 0 auto; }
 
-  /* ===== حالة فارغة / تحميل ===== */
+  /* ===== جداول ===== */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; min-width:500px; }
+  th { background: var(--card2); padding: 10px 16px; text-align: right; font-size: 13px; color: var(--muted); font-weight: 500; }
+  td { padding: 11px 16px; border-top: 1px solid var(--border); font-size: 14px; }
+
   .empty { text-align: center; padding: 40px; color: var(--muted); font-size: 14px; }
   .loading { text-align: center; padding: 30px; color: var(--muted); }
 
@@ -123,11 +128,47 @@
       </div>
     </div>
 
-    <!-- بقية الواجهة كما كانت (مختصرة) -->
-    <div id="tab-channels" style="display:none"><div id="channels-body"><div class="loading">⏳</div></div></div>
-    <div id="tab-campaigns" style="display:none"><div id="campaigns-active-body"><div class="loading">⏳</div></div></div>
-    <div id="tab-users" style="display:none"><div id="users-body"><div class="loading">⏳</div></div></div>
-    <div id="tab-pricing" style="display:none"><div id="pricing-body"><div class="loading">⏳</div></div></div>
+    <!-- ===== القنوات ===== -->
+    <div id="tab-channels" style="display:none">
+      <div id="add-channel-form" class="add-form"></div>
+      <div class="section">
+        <div class="section-header">
+          <h3>القنوات النشطة</h3>
+        </div>
+        <div id="channels-body"><div class="loading">⏳ جاري التحميل...</div></div>
+      </div>
+    </div>
+
+    <!-- ===== الحملات ===== -->
+    <div id="tab-campaigns" style="display:none">
+      <div class="section">
+        <div class="section-header"><h3>🟢 الحملات النشطة</h3></div>
+        <div id="campaigns-active-body"><div class="loading">⏳ جاري التحميل...</div></div>
+      </div>
+      <div class="section">
+        <div class="section-header"><h3>✅ الحملات المكتملة</h3></div>
+        <div id="campaigns-completed-body"><div class="loading">⏳ جاري التحميل...</div></div>
+      </div>
+    </div>
+
+    <!-- ===== المستخدمون ===== -->
+    <div id="tab-users" style="display:none">
+      <div class="section">
+        <div class="section-header">
+          <h3>المستخدمون</h3>
+          <input type="text" class="search-bar" placeholder="🔍 بحث بالاسم..." oninput="filterUsers(this.value)">
+        </div>
+        <div id="users-body"><div class="loading">⏳ جاري التحميل...</div></div>
+      </div>
+    </div>
+
+    <!-- ===== الت��عير ===== -->
+    <div id="tab-pricing" style="display:none">
+      <div class="section">
+        <div class="section-header"><h3>إعدادات التسعير</h3></div>
+        <div id="pricing-body"><div class="loading">⏳ جاري التحميل...</div></div>
+      </div>
+    </div>
 
   </div>
 </div>
@@ -135,7 +176,6 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// Allow overriding BASE for debugging (user can type another host in the login box)
 let BASE = window.location.origin;
 let TOKEN = '';
 let usersData = [];
@@ -156,25 +196,16 @@ function setLoginError(text) {
   el.textContent = text;
   el.style.display = 'block';
 }
+function clearLoginError() { const el = document.getElementById('login-error'); if (el) el.style.display = 'none'; }
 
-function clearLoginError() {
-  const el = document.getElementById('login-error');
-  el.style.display = 'none';
-}
-
-// Try auto-login if token saved in localStorage
 window.addEventListener('DOMContentLoaded', async () => {
-  // set server-input default
   const serverInput = document.getElementById('server-input');
   if (serverInput) serverInput.value = BASE;
-
   try {
     const saved = localStorage.getItem('admin_token');
     if (!saved) return;
     TOKEN = saved;
-    const loginBox = document.querySelector('.login-box');
-    if (loginBox) loginBox.style.opacity = '0.6';
-
+    const loginBox = document.querySelector('.login-box'); if (loginBox) loginBox.style.opacity = '0.6';
     const r = await apiFetch('/admin/api/stats');
     if (r.ok) {
       document.getElementById('login-screen').style.display = 'none';
@@ -182,83 +213,51 @@ window.addEventListener('DOMContentLoaded', async () => {
       loadStats();
       showToast('تم تسجيل الدخول تلقائياً');
     } else {
-      const body = await readJsonSafe(r);
-      const msg = body && body.error ? body.error : `Status ${r.status}`;
-      // invalid token -> remove and stay on login screen
-      localStorage.removeItem('admin_token');
-      TOKEN = '';
+      localStorage.removeItem('admin_token'); TOKEN = '';
+      const body = await readJsonSafe(r); const msg = body && body.error ? body.error : `Status ${r.status}`;
       setLoginError(`خطأ: ${msg}`);
     }
-  } catch (err) {
-    console.error('Admin auto-login failed:', err);
-    showToast('خطأ في الاتصال. تفقد سجلات الخادم أو الشبكة.');
-  } finally {
-    const loginBox = document.querySelector('.login-box');
-    if (loginBox) loginBox.style.opacity = '1';
-  }
+  } catch (err) { console.error('Admin auto-login failed:', err); showToast('خطأ في الاتصال.'); }
+  finally { const loginBox = document.querySelector('.login-box'); if (loginBox) loginBox.style.opacity = '1'; }
 });
 
-// ===== تسجيل الدخول =====
 async function login() {
   const pwdEl = document.getElementById('password-input');
   const serverEl = document.getElementById('server-input');
   if (serverEl && serverEl.value) BASE = serverEl.value.replace(/\/+$/, '');
-  const pwd = pwdEl.value;
-  if (!pwd) return;
-  TOKEN = pwd;
-  clearLoginError();
-  const btn = document.getElementById('login-btn');
-  btn.disabled = true;
+  const pwd = pwdEl.value; if (!pwd) return; TOKEN = pwd;
+  clearLoginError(); const btn = document.getElementById('login-btn'); if (btn) btn.disabled = true;
   try {
     const r = await apiFetch('/admin/api/stats');
     if (r.ok) {
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app').style.display = 'block';
       localStorage.setItem('admin_token', TOKEN);
-      loadStats();
-      showToast('تم تسجيل الدخول');
+      loadStats(); showToast('تم تسجيل الدخول');
     } else {
-      const body = await readJsonSafe(r);
-      const msg = body && body.error ? body.error : `Status ${r.status}`;
-      setLoginError(`خطأ: ${msg}`);
-      TOKEN = '';
+      const body = await readJsonSafe(r); const msg = body && body.error ? body.error : `Status ${r.status}`;
+      setLoginError(`خطأ: ${msg}`); TOKEN = '';
     }
-  } catch (err) {
-    console.error('Login request failed:', err);
-    setLoginError('فشل الاتصال بالخادم. تحقّق من عنوان الخادم أو الشبكة.');
-    TOKEN = '';
-  } finally {
-    btn.disabled = false;
-  }
+  } catch (err) { console.error('Login request failed:', err); setLoginError('فشل الاتصال بالخادم.'); TOKEN = ''; }
+  finally { if (btn) btn.disabled = false; }
 }
 
-function logout() {
-  TOKEN = '';
-  localStorage.removeItem('admin_token');
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('password-input').value = '';
-  clearLoginError();
-}
+function logout() { TOKEN = ''; localStorage.removeItem('admin_token'); document.getElementById('app').style.display = 'none'; document.getElementById('login-screen').style.display = 'flex'; document.getElementById('password-input').value = ''; clearLoginError(); }
 
-// ===== API helper =====
 async function apiFetch(path, opts = {}) {
   const url = (BASE || window.location.origin) + path;
-  return fetch(url, {
-    ...opts,
-    headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json', ...(opts.headers || {}) },
-  });
+  return fetch(url, { ...opts, headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json', ...(opts.headers || {}) }, });
 }
 
-// ===== تبويبات =====
 function showTab(name, btn) {
-  ['stats', 'channels', 'campaigns', 'users', 'pricing'].forEach(t => {
-    const el = document.getElementById('tab-' + t);
-    if (el) el.style.display = t === name ? 'block' : 'none';
-  });
+  ['stats','channels','campaigns','users','pricing'].forEach(t => { const el = document.getElementById('tab-'+t); if (el) el.style.display = t===name ? 'block' : 'none'; });
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   if (name === 'stats') loadStats();
+  if (name === 'channels') loadChannels();
+  if (name === 'campaigns') loadCampaigns();
+  if (name === 'users') loadUsers();
+  if (name === 'pricing') loadPricing();
 }
 
 // ===== إحصائيات =====
@@ -269,10 +268,112 @@ async function loadStats() {
     const d = await r.json();
     const g = document.getElementById('stats-grid');
     if (g) g.innerHTML = `\n      <div class="stat-card"><div class="icon">👥</div><div class="value">${d.users}</div><div class="label">مستخدم مسجّل</div></div>\n      <div class="stat-card"><div class="icon">📢</div><div class="value">${d.channels}</div><div class="label">قناة نشطة</div></div>\n      <div class="stat-card"><div class="icon">🎯</div><div class="value">${d.campaigns}</div><div class="label">حملة نشطة</div></div>\n      <div class="stat-card"><div class="icon">✅</div><div class="value">${d.tasks}</div><div class="label">مهمة مكتملة</div></div>\n      <div class="stat-card"><div class="icon">💰</div><div class="value">${d.totalPoints}</div><div class="label">نقاط إجمالية</div></div>\n    `;
-  } catch (err) {
-    console.error('loadStats error', err);
-    showToast('فشل تحميل الإحصاءات');
-  }
+  } catch (err) { console.error('loadStats error', err); showToast('فشل تحميل الإحصاءات'); }
+}
+
+// ===== القنوات =====
+async function loadChannels() {
+  const container = document.getElementById('channels-body');
+  if (!container) return;
+  container.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    const r = await apiFetch('/admin/api/channels');
+    if (!r.ok) {
+      const body = await readJsonSafe(r);
+      container.innerHTML = `<div class="empty">خطأ: ${body && body.error ? body.error : 'فشل تحميل القنوات'}</div>`;
+      return;
+    }
+    const channels = await r.json();
+    if (!channels || !channels.length) { container.innerHTML = '<div class="empty">لا توجد قنوات بعد</div>'; return; }
+    const rows = channels.map(c => `
+      <tr>
+        <td>${c.id}</td>
+        <td>${c.channel_username ? '@'+c.channel_username : c.channel_identifier || '-'}</td>
+        <td>${c.channel_name || '-'}</td>
+        <td><span id="pts-${c.id}">${c.points_reward ?? '-'}</span></td>
+        <td>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-blue" onclick="editChannel(${c.id})">✏️</button>
+            <button class="btn btn-red" onclick="deleteChannel(${c.id})">🗑️</button>
+          </div>
+        </td>
+      </tr>`).join('');
+    container.innerHTML = `<div class="table-wrap"><table>
+      <tr><th>#</th><th>المعرّف</th><th>الاسم</th><th>النقاط</th><th>إجراءات</th></tr>
+      ${rows}
+    </table></div>`;
+  } catch (err) { console.error('loadChannels error', err); container.innerHTML = '<div class="empty">فشل الاتصال بخادم القنوات</div>'; }
+}
+
+// Simple stubs for actions (they will call APIs if exist)
+function editChannel(id) { showToast('ميزة التعديل قيد التطوير'); }
+async function deleteChannel(id) {
+  if (!confirm('هل تريد حذف القناة؟')) return;
+  try {
+    const r = await apiFetch(`/admin/api/channels/${id}`, { method: 'DELETE' });
+    if (r.ok) { showToast('تم حذف القناة'); loadChannels(); }
+    else { const b = await readJsonSafe(r); showToast(b && b.error ? b.error : 'فشل الحذف'); }
+  } catch (err) { console.error('deleteChannel error', err); showToast('فشل الاتصال'); }
+}
+
+// ===== الحملات =====
+async function loadCampaigns() {
+  const activeEl = document.getElementById('campaigns-active-body');
+  const completedEl = document.getElementById('campaigns-completed-body');
+  if (activeEl) activeEl.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  if (completedEl) completedEl.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    const r = await apiFetch('/admin/api/campaigns');
+    if (!r.ok) {
+      const body = await readJsonSafe(r);
+      if (activeEl) activeEl.innerHTML = `<div class="empty">خطأ: ${body && body.error ? body.error : 'فشل تحميل الحملات'}</div>`;
+      if (completedEl) completedEl.innerHTML = '';
+      return;
+    }
+    const data = await r.json();
+    const active = data.active || data.activeCampaigns || data.active_campaigns || [];
+    const completed = data.completed || data.completedCampaigns || data.completed_campaigns || [];
+    if (activeEl) {
+      if (!active.length) activeEl.innerHTML = '<div class="empty">لا توجد حملات نشطة</div>';
+      else activeEl.innerHTML = `<div class="table-wrap"><table><tr><th>#</th><th>الاسم</th><th>القناة</th><th>حالة</th></tr>${active.map(c=>`<tr><td>${c.id}</td><td>${c.title||c.name||'-'}</td><td>${c.channel_name||c.channel_username||'-'}</td><td>${c.status||'نشطة'}</td></tr>`).join('')}</table></div>`;
+    }
+    if (completedEl) {
+      if (!completed.length) completedEl.innerHTML = '<div class="empty">لا توجد حملات مكتملة</div>';
+      else completedEl.innerHTML = `<div class="table-wrap"><table><tr><th>#</th><th>الاسم</th><th>القناة</th><th>حالة</th></tr>${completed.map(c=>`<tr><td>${c.id}</td><td>${c.title||c.name||'-'}</td><td>${c.channel_name||c.channel_username||'-'}</td><td>مكتملة</td></tr>`).join('')}</table></div>`;
+    }
+  } catch (err) { console.error('loadCampaigns error', err); if (activeEl) activeEl.innerHTML = '<div class="empty">فشل تحميل الحملات</div>'; if (completedEl) completedEl.innerHTML = '';} 
+}
+
+// ===== المستخدمون =====
+async function loadUsers() {
+  const el = document.getElementById('users-body'); if (!el) return; el.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    const r = await apiFetch('/admin/api/users');
+    if (!r.ok) { const body = await readJsonSafe(r); el.innerHTML = `<div class="empty">خطأ: ${body && body.error ? body.error : 'فشل تحميل المستخدمين'}</div>`; return; }
+    const users = await r.json();
+    if (!users || !users.length) { el.innerHTML = '<div class="empty">لا يوجد مستخدمون</div>'; return; }
+    el.innerHTML = `<div class="table-wrap"><table><tr><th>#</th><th>المعرّف</th><th>اسم</th><th>نقاط</th></tr>${users.map(u=>`<tr><td>${u.id}</td><td>${u.username||u.telegram_id||'-'}</td><td>${u.name||'-'}</td><td>${u.points||0}</td></tr>`).join('')}</table></div>`;
+    usersData = users;
+  } catch (err) { console.error('loadUsers error', err); el.innerHTML = '<div class="empty">فشل تحميل المستخدمين</div>'; }
+}
+
+function filterUsers(q) {
+  q = (q||'').toLowerCase(); const el = document.getElementById('users-body'); if (!el) return; if (!usersData || !usersData.length) return; const filtered = usersData.filter(u=>((u.username||'').toLowerCase().includes(q) || (u.name||'').toLowerCase().includes(q)));
+  if (!filtered.length) { el.innerHTML = '<div class="empty">لا توجد نتائج</div>'; return; }
+  el.innerHTML = `<div class="table-wrap"><table><tr><th>#</th><th>المعرّف</th><th>اسم</th><th>نقاط</th></tr>${filtered.map(u=>`<tr><td>${u.id}</td><td>${u.username||u.telegram_id||'-'}</td><td>${u.name||'-'}</td><td>${u.points||0}</td></tr>`).join('')}</table></div>`;
+}
+
+// ===== التسعير =====
+async function loadPricing() {
+  const el = document.getElementById('pricing-body'); if (!el) return; el.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    const r = await apiFetch('/admin/api/pricing');
+    if (!r.ok) { const body = await readJsonSafe(r); el.innerHTML = `<div class="empty">خطأ: ${body && body.error ? body.error : 'فشل تحميل إعدادات التسعير'}</div>`; return; }
+    const pricing = await r.json();
+    if (!pricing) { el.innerHTML = '<div class="empty">لا توجد إعدادات</div>'; return; }
+    // simple render: show JSON if shape unknown
+    el.innerHTML = `<div class="section"><pre style="white-space:pre-wrap;color:var(--muted)">${JSON.stringify(pricing,null,2)}</pre></div>`;
+  } catch (err) { console.error('loadPricing error', err); el.innerHTML = '<div class="empty">فشل تحميل إعدادات التسعير</div>'; }
 }
 
 </script>
