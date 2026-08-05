@@ -316,6 +316,37 @@ const BASE = window.location.origin;
 let TOKEN = '';
 let usersData = [];
 
+// Try auto-login if token saved in localStorage
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const saved = localStorage.getItem('admin_token');
+    if (!saved) return;
+    TOKEN = saved;
+    const loginBox = document.querySelector('.login-box');
+    if (loginBox) loginBox.style.opacity = '0.6';
+
+    const r = await apiFetch('/admin/api/stats');
+    if (r.ok) {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      // don't overwrite localStorage; it's already the saved token
+      loadStats();
+    } else {
+      // invalid token -> remove and stay on login screen
+      localStorage.removeItem('admin_token');
+      TOKEN = '';
+      const errEl = document.getElementById('login-error');
+      if (errEl) errEl.style.display = 'none';
+    }
+  } catch (err) {
+    // Network or other error — log for debugging but don't clear token automatically
+    console.error('Admin auto-login failed:', err);
+  } finally {
+    const loginBox = document.querySelector('.login-box');
+    if (loginBox) loginBox.style.opacity = '1';
+  }
+});
+
 // ===== تسجيل الدخول =====
 async function login() {
   const pwd = document.getElementById('password-input').value;
