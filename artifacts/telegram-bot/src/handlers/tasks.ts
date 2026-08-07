@@ -240,13 +240,12 @@ export async function handleCheckCampaign(ctx: Context, campaignId: number): Pro
     return;
   }
 
-  const { success, campaignCompleted } = await recordCampaignSubscription(user.id, campaignId);
+  const pointsEarned = await getCampaignSubscriptionPoints();
+  const { success, campaignCompleted } = await recordCampaignSubscription(user.id, campaignId, pointsEarned);
   if (!success) {
     await ctx.answerCbQuery('✅ اشتركت في هذه الحملة مسبقاً!'); return;
   }
 
-  const pointsEarned = await getCampaignSubscriptionPoints();
-  await addPoints(user.id, pointsEarned);
   const updated = (await getUserById(user.id))!;
 
   await ctx.answerCbQuery('✅ تم تسجيل اشتراكك!');

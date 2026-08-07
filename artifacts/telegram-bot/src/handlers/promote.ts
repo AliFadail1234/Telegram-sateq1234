@@ -218,7 +218,8 @@ export async function handlePromoteCustomInput(ctx: Context, input: string): Pro
   }
 
   const tiers = await getActivePricingTiers();
-  const rate = Math.min(...tiers.map(t => t.points / t.subscribers));
+  const rates = tiers.length > 0 ? tiers.map(t => t.points / t.subscribers) : [1];
+  const rate = Math.min(...rates);
   const cost = Math.max(1, Math.ceil(n * rate));
 
   if (user.points < cost) {

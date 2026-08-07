@@ -15,3 +15,7 @@ export const bot = new Telegraf(BOT_TOKEN);
 
 // إعداد المعالجات
 setupHandlers(bot);
+
+bot.catch((err, ctx) => {
+  console.error('❌ خطأ عام في البوت:', err, { update: ctx.update });
+});

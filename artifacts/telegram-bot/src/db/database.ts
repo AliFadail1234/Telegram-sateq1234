@@ -5,9 +5,10 @@ if (!DATABASE_URL) {
   throw new Error('❌ DATABASE_URL غير محدد في متغيرات البيئة.');
 }
 
+const useSsl = process.env.DB_SSL === 'true' || process.env.NODE_ENV === 'production';
 export const pool = new Pool({
   connectionString: DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: useSsl ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } : undefined,
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
@@ -76,6 +77,15 @@ export async function initDatabase(): Promise<void> {
       value      TEXT NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
+    CREATE INDEX IF NOT EXISTS idx_completed_tasks_user_id ON completed_tasks(user_id);
+    CREATE INDEX IF NOT EXISTS idx_completed_tasks_channel_id ON completed_tasks(channel_id);
+    CREATE INDEX IF NOT EXISTS idx_campaign_subscriptions_user_id ON campaign_subscriptions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_campaign_subscriptions_campaign_id ON campaign_subscriptions(campaign_id);
+    CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status);
+    CREATE INDEX IF NOT EXISTS idx_campaigns_user_id ON campaigns(user_id);
+    CREATE INDEX IF NOT EXISTS idx_daily_claims_user_id ON daily_claims(user_id);
   `);
 
   // تهيئة القيم الافتراضية للإعدادات إن لم تكن موجودة

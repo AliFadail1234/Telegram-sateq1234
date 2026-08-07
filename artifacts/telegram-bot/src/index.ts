@@ -11,8 +11,15 @@ const server = http.createServer(async (req, res) => {
 
   // Admin dashboard & API
   if (url.startsWith('/admin')) {
-    const handled = await handleAdminRequest(req, res);
-    if (handled) return;
+    try {
+      const handled = await handleAdminRequest(req, res);
+      if (handled) return;
+    } catch (err) {
+      console.error('❌ خطأ في معالجة طلب إدارة الأدمن:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Internal server error' }));
+      return;
+    }
   }
 
   // Health check
@@ -23,7 +30,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`🌐 Server يعمل على port ${PORT}`);
   console.log(`🛠️  لوحة التحكم: http://localhost:${PORT}/admin`);
-  console.log(`🔑  كلمة المرور: ${process.env.ADMIN_PASSWORD ?? 'admin123 (افتراضي)'}`);
+  console.log('🔑  لوحة الإدارة محمية. تأكد من تعيين ADMIN_PASSWORD في بيئة الإنتاج.');
 });
 
 // bot.launch() يبدأ الاستطلاع ولا يُرجع إلا عند الإيقاف

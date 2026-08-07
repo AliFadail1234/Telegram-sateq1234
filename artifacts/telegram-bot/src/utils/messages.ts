@@ -101,8 +101,11 @@ export function adminUserInfoMessage(user: User, completedTasks: number): string
 }
 
 export function adminCampaignInfoMessage(campaign: Campaign): string {
-  const progress = Math.round((campaign.completed_subscribers / campaign.target_subscribers) * 100);
-  const bar = '█'.repeat(Math.floor(progress / 10)) + '░'.repeat(10 - Math.floor(progress / 10));
+  const progress = campaign.target_subscribers > 0
+    ? Math.round((campaign.completed_subscribers / campaign.target_subscribers) * 100)
+    : 0;
+  const clampedProgress = Math.min(Math.max(progress, 0), 100);
+  const bar = '█'.repeat(Math.floor(clampedProgress / 10)) + '░'.repeat(10 - Math.floor(clampedProgress / 10));
   return `🎯 حملة #${campaign.id}\n\n📢 القناة: @${campaign.channel_username}\n📛 الاسم: ${campaign.channel_name}\n👥 المستهدف: ${campaign.target_subscribers}\n✅ المنفّذ: ${campaign.completed_subscribers}\n📊 التقدم: ${bar} ${progress}%\n💰 النقاط المدفوعة: ${campaign.points_paid}\n🔄 الحالة: ${statusLabel(campaign.status)}\n📅 ${campaign.created_at}`;
 }
 
