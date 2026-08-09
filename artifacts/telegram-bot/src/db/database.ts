@@ -80,6 +80,39 @@ export async function initDatabase(): Promise<void> {
     );
   `);
 
+  // ===== جداول الهدايا والدعوات المعلقة =====
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS point_gifts (
+      id             SERIAL PRIMARY KEY,
+      points         INTEGER NOT NULL,
+      max_claims     INTEGER NOT NULL,
+      current_claims INTEGER NOT NULL DEFAULT 0,
+      description    TEXT,
+      is_active      SMALLINT NOT NULL DEFAULT 1,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS gift_claims (
+      id         SERIAL PRIMARY KEY,
+      gift_id    INTEGER NOT NULL REFERENCES point_gifts(id) ON DELETE CASCADE,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(gift_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS pending_referrals (
+      id                SERIAL PRIMARY KEY,
+      referrer_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      referred_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reward_points     INTEGER NOT NULL,
+      tasks_completed   INTEGER NOT NULL DEFAULT 0,
+      required_tasks    INTEGER NOT NULL DEFAULT 3,
+      is_rewarded       SMALLINT NOT NULL DEFAULT 0,
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(referred_id)
+    );
+  `);
+
   // ===== الجداول الجديدة =====
   await pool.query(`
     CREATE TABLE IF NOT EXISTS point_transactions (
@@ -143,7 +176,8 @@ export async function initDatabase(): Promise<void> {
       ('min_withdraw', '50'),
       ('bot_name', 'بوت النقاط'),
       ('welcome_message', 'مرحباً {name}! 👋\nأهلاً بك في بوت النقاط.\nاشترك في القنوات واكسب نقاطاً لترويج قناتك!'),
-      ('pricing_tiers', '[{"subscribers":5,"points":10,"label":"5 مشتركين — 10 نقاط"},{"subscribers":10,"points":20,"label":"10 مشتركين — 20 نقطة"},{"subscribers":20,"points":40,"label":"20 مشتركاً — 40 نقطة"},{"subscribers":50,"points":100,"label":"50 مشتركاً — 100 نقطة"}]')
+      ('pricing_tiers', '[{"subscribers":5,"points":10,"label":"5 مشتركين — 10 نقاط"},{"subscribers":10,"points":20,"label":"10 مشتركين — 20 نقطة"},{"subscribers":20,"points":40,"label":"20 مشتركاً — 40 نقطة"},{"subscribers":50,"points":100,"label":"50 مشتركاً — 100 نقطة"}]'),
+      ('referral_task_threshold', '3')
     ON CONFLICT (key) DO NOTHING;
   `);
 

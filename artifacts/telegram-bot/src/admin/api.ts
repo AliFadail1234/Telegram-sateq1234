@@ -18,6 +18,7 @@ import {
   getAdmins, addAdmin, removeAdmin,
   getBroadcasts, saveBroadcast,
   getAllSettings, setSetting,
+  getGifts, createGift, deleteGift, deactivateGift,
 } from '../db/queries.js';
 import {
   getActivePricingTiers,
@@ -503,12 +504,45 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
 
     if (apiPath === '/settings' && method === 'PUT') {
       const body = await readBody(req);
-      const allowed = ['bot_name', 'welcome_message', 'daily_bonus_points', 'referral_reward', 'min_withdraw'];
-      for (const key of allowed) {
-        if (key in body && body[key] !== undefined && body[key] !== null) {
-          await setSetting(key, String(body[key]));
+      // أي مفتاح إعداد مسموح به (نتجنب الأحرف الخطرة فقط)
+      const SAFE_KEY = /^[a-z_]{1,60}$/;
+      for (const [key, val] of Object.entries(body)) {
+        if (SAFE_KEY.test(key) && val !== undefined && val !== null) {
+          await setSetting(key, String(val));
         }
       }
+      json(req, res, 200, { ok: true });
+      return true;
+    }
+
+    // ===== الهدايا =====
+    if (apiPath === '/gifts' && method === 'GET') {
+      const gifts = await getGifts();
+      json(req, res, 200, gifts);
+      return true;
+    }
+
+    if (apiPath === '/gifts' && method === 'POST') {
+      const body = await readBody(req);
+      const points = parseInt(String(body['points'] ?? '0'), 10);
+      const maxClaims = parseInt(String(body['max_claims'] ?? '0'), 10);
+      const description = String(body['description'] ?? '').trim() || null;
+      if (!points || points < 1) { json(req, res, 400, { error: 'أدخل عدد نقاط صحيح' }); return true; }
+      if (!maxClaims || maxClaims < 1) { json(req, res, 400, { error: 'أدخل عدد أعضاء صحيح' }); return true; }
+      const gift = await createGift(points, maxClaims, description);
+      json(req, res, 201, gift);
+      return true;
+    }
+
+    const giftIdMatch = apiPath.match(/^\/gifts\/(\d+)$/);
+    if (giftIdMatch && method === 'DELETE') {
+      await deleteGift(parseInt(giftIdMatch[1]!, 10));
+      json(req, res, 200, { ok: true });
+      return true;
+    }
+
+    if (giftIdMatch && method === 'PATCH') {
+      await deactivateGift(parseInt(giftIdMatch[1]!, 10));
       json(req, res, 200, { ok: true });
       return true;
     }

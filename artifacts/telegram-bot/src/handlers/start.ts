@@ -1,15 +1,27 @@
 import type { Context } from 'telegraf';
-import { getOrCreateUser, getUserByTelegramId, getSetting, recordReferral, getUserById } from '../db/queries.js';
+import { getOrCreateUser, getUserByTelegramId, getSetting, recordPendingReferral, getUserById } from '../db/queries.js';
 import { mainMenuKeyboard } from '../utils/keyboards.js';
 import { welcomeMessage } from '../utils/messages.js';
 import { checkMandatoryChannel } from './mandatory.js';
+import { handleGiftStart } from './gift.js';
 
 export async function handleStart(ctx: Context): Promise<void> {
   const from = ctx.from;
   if (!from) return;
 
-  // استخراج معامل الدعوة من /start ref_{telegramId}
+  // استخراج معامل من /start
   const text = (ctx.message as { text?: string } | undefined)?.text ?? '';
+
+  // هدية نقاط: /start gift_<id>
+  const giftMatch = text.match(/^\/start\s+gift_(\d+)$/);
+  if (giftMatch) {
+    // تسجيل المستخدم أولاً إذا لم يكن موجوداً
+    await getOrCreateUser(from.id, from.first_name, from.last_name ?? null, from.username ?? null);
+    await handleGiftStart(ctx, parseInt(giftMatch[1]!, 10));
+    return;
+  }
+
+  // دعوة: /start ref_{telegramId}
   const paramMatch = text.match(/^\/start\s+ref_(\d+)$/);
   const referrerTelegramId = paramMatch ? parseInt(paramMatch[1]!, 10) : null;
 
@@ -24,10 +36,14 @@ export async function handleStart(ctx: Context): Promise<void> {
   if (isNew && referrerTelegramId && referrerTelegramId !== from.id) {
     const referrer = await getUserByTelegramId(referrerTelegramId);
     if (referrer) {
-      const rewardStr = await getSetting('referral_reward');
+      const [rewardStr, thresholdStr] = await Promise.all([
+        getSetting('referral_reward'),
+        getSetting('referral_task_threshold'),
+      ]);
       const rewardPoints = rewardStr ? parseInt(rewardStr, 10) : 0;
+      const requiredTasks = thresholdStr ? parseInt(thresholdStr, 10) : 3;
       if (rewardPoints > 0) {
-        await recordReferral(referrer.id, user.id, rewardPoints);
+        await recordPendingReferral(referrer.id, user.id, rewardPoints, requiredTasks);
         // إشعار المُحيل بقالب مخصَّص
         try {
           const updatedReferrer = await getUserById(referrer.id);

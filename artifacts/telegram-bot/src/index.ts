@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { bot } from './bot.js';
 import { handleAdminRequest } from './admin/api.js';
+import { setSetting } from './db/queries.js';
 
 console.log('🤖 جاري تشغيل بوت تيليجرام...');
 
@@ -34,8 +35,12 @@ server.listen(PORT, () => {
 });
 
 // bot.launch() يبدأ الاستطلاع ولا يُرجع إلا عند الإيقاف
-bot.launch({
-  dropPendingUpdates: true,
+bot.launch({ dropPendingUpdates: true }).then(async () => {
+  // حفظ username البوت في الإعدادات لاستخدامه في روابط الهدايا وغيرها
+  try {
+    const me = await bot.telegram.getMe();
+    if (me.username) await setSetting('bot_username', me.username);
+  } catch { /* تجاهل */ }
 }).catch((err: unknown) => {
   // لا ننهي العملية تلقائياً عند وجود تصادم 409 بسبب وجود مثيل آخر للـ getUpdates
   // (حالة شائعة عند إعادة التشغيل أو تشغيل أكثر من نسخة). بدلاً من الخروج، نطبع تحذيراً

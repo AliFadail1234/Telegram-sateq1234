@@ -485,15 +485,20 @@ tr:hover td { background:rgba(255,255,255,.02); }
 
       <div class="form-card">
         <div style="font-size:13px;font-weight:600;margin-bottom:14px;">⚙️ إعدادات نظام الدعوات</div>
-        <div class="form-row">
-          <div class="form-group-inline">
+        <div class="form-row" style="flex-wrap:wrap;gap:12px">
+          <div class="form-group-inline" style="flex:1;min-width:140px">
             <label>مكافأة الدعوة (نقاط)</label>
             <input id="referral-reward" type="number" min="0" placeholder="10">
+          </div>
+          <div class="form-group-inline" style="flex:1;min-width:140px">
+            <label>عدد المهام قبل صرف النقاط</label>
+            <input id="referral-task-threshold" type="number" min="0" placeholder="3">
           </div>
           <div class="form-group-inline" style="flex:0 0 auto;align-self:flex-end">
             <button class="btn btn-green" onclick="saveReferralSettings()">حفظ</button>
           </div>
         </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:10px">0 = صرف النقاط فوراً عند التسجيل &nbsp;|&nbsp; 3 = بعد إتمام 3 مهام</p>
       </div>
 
       <div class="two-col">
@@ -591,6 +596,40 @@ tr:hover td { background:rgba(255,255,255,.02); }
     <!-- ===== قسم الإذاعة ===== -->
     <div class="section" id="section-broadcasts">
       <div class="section-title"><span>📢</span> الإشعارات والإذاعة</div>
+
+      <!-- ===== هدايا النقاط ===== -->
+      <div class="form-card" style="border:1px solid var(--green);margin-bottom:20px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">🎁 إنشاء رابط هدية نقاط</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px">أرسل الرابط للمستخدمين — أول من يضغط عليه يحصل على النقاط حتى اكتمال الحصة.</p>
+        <div class="form-row" style="gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div class="form-group-inline" style="flex:1;min-width:100px">
+            <label>💎 عدد النقاط</label>
+            <input id="gift-points" type="number" min="1" placeholder="100">
+          </div>
+          <div class="form-group-inline" style="flex:1;min-width:100px">
+            <label>👥 عدد الأعضاء</label>
+            <input id="gift-max" type="number" min="1" placeholder="50">
+          </div>
+          <div class="form-group-inline" style="flex:2;min-width:160px">
+            <label>📝 وصف (اختياري)</label>
+            <input id="gift-desc" type="text" placeholder="هدية خاصة">
+          </div>
+          <div class="form-group-inline" style="flex:0 0 auto;align-self:flex-end">
+            <button class="btn btn-green" onclick="createGiftLink()">🎁 إنشاء رابط</button>
+          </div>
+        </div>
+        <div id="gift-result" style="display:none;padding:12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--green);margin-bottom:14px">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">رابط الهدية (اضغط لنسخ):</div>
+          <code id="gift-link-text" style="word-break:break-all;cursor:pointer;color:var(--green)" onclick="copyGiftLink()"></code>
+        </div>
+        <div class="table-card" style="margin-top:14px">
+          <div class="table-header"><div class="table-title">🎁 روابط الهدايا النشطة</div><button class="btn btn-gray btn-sm" onclick="loadGifts()">🔄</button></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>#</th><th>النقاط</th><th>الحصة</th><th>الاستخدام</th><th>الوصف</th><th>التاريخ</th><th>إجراء</th></tr></thead>
+            <tbody id="gifts-tbody"><tr><td colspan="7" class="empty">لا توجد هدايا</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
 
       <div class="two-col">
         <div>
@@ -911,7 +950,7 @@ function showSection(name) {
     points: () => loadPoints(1),
     referrals: loadReferrals,
     stats: loadStats,
-    broadcasts: loadBroadcasts,
+    broadcasts: async () => { await Promise.all([loadBroadcasts(), loadGifts(), getBotUsername()]); },
     messages: loadMessages,
     settings: loadSettings,
     admins: loadAdmins,
@@ -1357,6 +1396,7 @@ async function loadReferrals() {
 
   if (settings) {
     document.getElementById('referral-reward').value = settings.referral_reward || '10';
+    document.getElementById('referral-task-threshold').value = settings.referral_task_threshold ?? '3';
   }
 
   if (leaderboard && leaderboard.topReferrers) {
@@ -1378,8 +1418,10 @@ async function loadReferrals() {
 
 async function saveReferralSettings() {
   const reward = parseInt(document.getElementById('referral-reward').value, 10);
-  if (isNaN(reward) || reward < 0) { showToast('قيمة غير صحيحة', 'error'); return; }
-  const r = await api('/settings', { method: 'PUT', body: JSON.stringify({ referral_reward: reward }) });
+  const threshold = parseInt(document.getElementById('referral-task-threshold').value, 10);
+  if (isNaN(reward) || reward < 0) { showToast('قيمة مكافأة الدعوة غير صحيحة', 'error'); return; }
+  if (isNaN(threshold) || threshold < 0) { showToast('قيمة عدد المهام غير صحيحة', 'error'); return; }
+  const r = await api('/settings', { method: 'PUT', body: JSON.stringify({ referral_reward: reward, referral_task_threshold: threshold }) });
   if (r && r.ok) showToast('تم حفظ إعدادات الدعوات ✅');
   else showToast('فشل الحفظ', 'error');
 }
@@ -1452,6 +1494,73 @@ function setStatsDataset(dataset, btn) {
   document.querySelectorAll('#section-stats .chart-filters .chart-filter').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   if (statsChartData) renderStatsChart(statsChartData, dataset);
+}
+
+// ===== الهدايا =====
+let _botUsername = '';
+async function getBotUsername() {
+  if (_botUsername) return _botUsername;
+  const s = await apiJson('/settings');
+  _botUsername = (s && s.bot_username) ? s.bot_username : '';
+  return _botUsername;
+}
+
+async function loadGifts() {
+  const data = await apiJson('/gifts');
+  const tbody = document.getElementById('gifts-tbody');
+  if (!tbody) return;
+  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">لا توجد هدايا</td></tr>'; return; }
+  tbody.innerHTML = data.map((g, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td><b>💎 ${formatNum(g.points)}</b></td>
+      <td>${formatNum(g.max_claims)}</td>
+      <td><span class="badge ${g.current_claims >= g.max_claims ? 'badge-red' : 'badge-green'}">${formatNum(g.current_claims)} / ${formatNum(g.max_claims)}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${g.description ? escapeHtml(g.description) : '—'}</td>
+      <td style="font-size:11px;color:var(--muted)">${new Date(g.created_at).toLocaleDateString('ar-SA')}</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-blue btn-sm" onclick="copyGiftLinkById(${g.id})" title="نسخ الرابط">📋</button>
+          <button class="btn btn-red btn-sm" onclick="deleteGift(${g.id})" title="حذف">🗑️</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function createGiftLink() {
+  const points = parseInt(document.getElementById('gift-points').value, 10);
+  const maxClaims = parseInt(document.getElementById('gift-max').value, 10);
+  const description = document.getElementById('gift-desc').value.trim() || null;
+  if (!points || points < 1) { showToast('أدخل عدد نقاط صحيح', 'error'); return; }
+  if (!maxClaims || maxClaims < 1) { showToast('أدخل عدد أعضاء صحيح', 'error'); return; }
+  const body = { points, max_claims: maxClaims };
+  if (description) body.description = description;
+  const r = await api('/gifts', { method: 'POST', body: JSON.stringify(body) });
+  if (!r || !r.id) { showToast('فشل إنشاء الهدية', 'error'); return; }
+  const link = `https://t.me/${_botUsername || 'bot'}?start=gift_${r.id}`;
+  document.getElementById('gift-link-text').textContent = link;
+  document.getElementById('gift-result').style.display = 'block';
+  showToast('✅ تم إنشاء رابط الهدية');
+  loadGifts();
+}
+
+function copyGiftLink() {
+  const text = document.getElementById('gift-link-text').textContent;
+  navigator.clipboard?.writeText(text).then(() => showToast('تم نسخ الرابط 📋'));
+}
+
+async function copyGiftLinkById(id) {
+  const link = `https://t.me/${_botUsername || 'bot'}?start=gift_${id}`;
+  await navigator.clipboard?.writeText(link);
+  showToast('تم نسخ الرابط 📋');
+}
+
+async function deleteGift(id) {
+  if (!confirm('حذف هذه الهدية؟')) return;
+  const r = await api(`/gifts/${id}`, { method: 'DELETE' });
+  if (r && r.ok) { showToast('تم الحذف'); loadGifts(); }
+  else showToast('فشل الحذف', 'error');
 }
 
 // ===== الإذاعة =====

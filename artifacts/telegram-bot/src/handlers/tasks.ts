@@ -12,6 +12,7 @@ import {
   getChannelById,
   getCampaignById,
   getSetting,
+  checkPendingReferralOnTask,
 } from '../db/queries.js';
 import { channelTaskKeyboard } from '../utils/keyboards.js';
 import {
@@ -207,6 +208,9 @@ export async function handleCheckChannel(ctx: Context, channelId: number): Promi
   await addPoints(user.id, channel.points_reward);
   const updated = (await getUserById(user.id))!;
 
+  // فحص الدعوة المعلقة — قد تكتمل الآن
+  notifyReferrerIfUnlocked(ctx, user.id).catch(() => {});
+
   await ctx.answerCbQuery('✅ تم تسجيل اشتراكك!');
   await ctx.editMessageText(await buildTaskCompletedText(channel.channel_name, channel.points_reward, updated.points), {
     parse_mode: 'HTML',
@@ -258,6 +262,9 @@ export async function handleCheckCampaign(ctx: Context, campaignId: number): Pro
 
   const updated = (await getUserById(user.id))!;
 
+  // فحص الدعوة المعلقة
+  notifyReferrerIfUnlocked(ctx, user.id).catch(() => {});
+
   await ctx.answerCbQuery('✅ تم تسجيل اشتراكك!');
 
   const completedNote = campaignCompleted ? '\n\n🎉 اكتملت هذه الحملة!' : '';
@@ -265,4 +272,16 @@ export async function handleCheckCampaign(ctx: Context, campaignId: number): Pro
     (await buildTaskCompletedText(campaign.channel_name, pointsEarned, updated.points)) + completedNote,
     { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '⭐ المهمة التالية', callback_data: 'earn_tasks' }], [{ text: '🔙 القائمة', callback_data: 'earn_menu' }]] } },
   );
+}
+
+/** يفحص إذا أتمّ المستخدم المدعو العدد المطلوب من المهام ويُشعر المُحيل */
+async function notifyReferrerIfUnlocked(ctx: Context, referredId: number): Promise<void> {
+  const reward = await checkPendingReferralOnTask(referredId);
+  if (!reward) return;
+  try {
+    const msgTemplate = await getSetting('referral_notify_msg');
+    const defMsg = `🎉 مبروك! اكتملت دعوتك!\n\nأتمّ صديقك المهام المطلوبة.\n💰 تم إضافة {points} نقطة لك.`;
+    const text = (msgTemplate || defMsg).replace(/{points}/g, String(reward.points));
+    await ctx.telegram.sendMessage(reward.telegramId, text, { parse_mode: 'HTML' });
+  } catch { /* تجاهل فشل الإشعار */ }
 }

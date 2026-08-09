@@ -314,33 +314,9 @@ export async function incrementReferralCount(referrerId: number): Promise<void> 
   await pool.query('UPDATE users SET referral_count = referral_count + 1 WHERE id = $1', [referrerId]);
 }
 
+/** @deprecated استخدم recordPendingReferral الجديدة — مُبقى للتوافق */
 export async function recordReferral(referrerId: number, referredId: number, rewardPoints: number): Promise<boolean> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    // ربط المُحال بالمُحيل (فقط إذا لم يكن لديه محيل بالفعل)
-    const updateReferred = await client.query(
-      'UPDATE users SET referrer_id = $1 WHERE id = $2 AND referrer_id IS NULL',
-      [referrerId, referredId],
-    );
-    if ((updateReferred.rowCount ?? 0) === 0) {
-      await client.query('ROLLBACK');
-      return false;
-    }
-    // زيادة عداد الدعوات وإضافة النقاط للمُحيل
-    await client.query(
-      'UPDATE users SET referral_count = referral_count + 1, points = points + $1 WHERE id = $2',
-      [rewardPoints, referrerId],
-    );
-    await client.query('COMMIT');
-    await addTransaction(referrerId, 'referral', rewardPoints, 'مكافأة دعوة مستخدم جديد', referredId);
-    return true;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  return recordPendingReferral(referrerId, referredId, rewardPoints, 3);
 }
 
 // ========== قنوات الأدمن ==========
@@ -774,4 +750,124 @@ export async function setSetting(key: string, value: string): Promise<void> {
 export async function getAllSettings(): Promise<Record<string, string>> {
   const { rows } = await pool.query('SELECT key, value FROM settings');
   return Object.fromEntries(rows.map(r => [r.key, r.value]));
+}
+
+// ========== الهدايا ==========
+
+export interface PointGift {
+  id: number;
+  points: number;
+  max_claims: number;
+  current_claims: number;
+  description: string | null;
+  is_active: number;
+  created_at: string;
+}
+
+export async function createGift(points: number, maxClaims: number, description: string | null): Promise<PointGift> {
+  const { rows } = await pool.query(
+    'INSERT INTO point_gifts (points, max_claims, description) VALUES ($1, $2, $3) RETURNING *',
+    [points, maxClaims, description],
+  );
+  return rows[0] as PointGift;
+}
+
+export async function getGifts(): Promise<PointGift[]> {
+  const { rows } = await pool.query('SELECT * FROM point_gifts ORDER BY created_at DESC');
+  return rows as PointGift[];
+}
+
+export async function deactivateGift(id: number): Promise<void> {
+  await pool.query('UPDATE point_gifts SET is_active = 0 WHERE id = $1', [id]);
+}
+
+export async function deleteGift(id: number): Promise<void> {
+  await pool.query('DELETE FROM point_gifts WHERE id = $1', [id]);
+}
+
+export async function claimGift(giftId: number, userId: number): Promise<'ok' | 'already_claimed' | 'exhausted' | 'not_found'> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      'SELECT * FROM point_gifts WHERE id = $1 AND is_active = 1 FOR UPDATE',
+      [giftId],
+    );
+    if (!rows[0]) { await client.query('ROLLBACK'); return 'not_found'; }
+    const gift = rows[0] as PointGift;
+    if (gift.current_claims >= gift.max_claims) { await client.query('ROLLBACK'); return 'exhausted'; }
+    // تحقق من أن المستخدم لم يطالب بهذه الهدية مسبقاً
+    const dup = await client.query('SELECT id FROM gift_claims WHERE gift_id=$1 AND user_id=$2', [giftId, userId]);
+    if (dup.rows.length > 0) { await client.query('ROLLBACK'); return 'already_claimed'; }
+    // سجّل المطالبة وأضف النقاط
+    await client.query('INSERT INTO gift_claims (gift_id, user_id) VALUES ($1, $2)', [giftId, userId]);
+    await client.query('UPDATE point_gifts SET current_claims = current_claims + 1 WHERE id = $1', [giftId]);
+    await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [gift.points, userId]);
+    await client.query('COMMIT');
+    await addTransaction(userId, 'gift', gift.points, `هدية نقاط #${giftId}`, giftId);
+    return 'ok';
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// ========== الدعوات المعلقة ==========
+
+export async function recordPendingReferral(referrerId: number, referredId: number, rewardPoints: number, requiredTasks: number): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const upd = await client.query(
+      'UPDATE users SET referrer_id = $1 WHERE id = $2 AND referrer_id IS NULL',
+      [referrerId, referredId],
+    );
+    if ((upd.rowCount ?? 0) === 0) { await client.query('ROLLBACK'); return false; }
+    await client.query(
+      `INSERT INTO pending_referrals (referrer_id, referred_id, reward_points, required_tasks)
+       VALUES ($1, $2, $3, $4) ON CONFLICT (referred_id) DO NOTHING`,
+      [referrerId, referredId, rewardPoints, requiredTasks],
+    );
+    await client.query('COMMIT');
+    return true;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/** يُستدعى بعد كل إتمام مهمة. يُرجع نقاط المكافأة إذا تحقق الشرط، أو null. */
+export async function checkPendingReferralOnTask(referredId: number): Promise<{ referrerId: number; telegramId: number; points: number } | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT pr.*, u.telegram_id AS referrer_telegram_id
+       FROM pending_referrals pr
+       JOIN users u ON u.id = pr.referrer_id
+       WHERE pr.referred_id = $1 AND pr.is_rewarded = 0
+       FOR UPDATE`,
+      [referredId],
+    );
+    if (!rows[0]) { await client.query('ROLLBACK'); return null; }
+    const pr = rows[0];
+    const newCount = pr.tasks_completed + 1;
+    await client.query('UPDATE pending_referrals SET tasks_completed = $1 WHERE id = $2', [newCount, pr.id]);
+    if (newCount < pr.required_tasks) { await client.query('COMMIT'); return null; }
+    // الشرط تحقق — أعطِ المُحيل نقاطه
+    await client.query('UPDATE pending_referrals SET is_rewarded = 1 WHERE id = $1', [pr.id]);
+    await client.query('UPDATE users SET referral_count = referral_count + 1, points = points + $1 WHERE id = $2', [pr.reward_points, pr.referrer_id]);
+    await client.query('COMMIT');
+    await addTransaction(pr.referrer_id, 'referral', pr.reward_points, 'مكافأة دعوة (بعد إتمام المهام)', referredId);
+    return { referrerId: pr.referrer_id, telegramId: Number(pr.referrer_telegram_id), points: pr.reward_points };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
