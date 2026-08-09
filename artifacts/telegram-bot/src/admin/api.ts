@@ -31,8 +31,8 @@ const DASHBOARD_HTML = path.join(__dirname, 'dashboard.html');
 const DASHBOARD_HTML_FALLBACK = path.join(__dirname, '../src/admin/dashboard.html');
 
 function getAdminPassword(): string | undefined {
-  const raw = process.env.ADMIN_PASSWORD;
-  if (raw !== undefined) return raw.trim();
+  const raw = process.env.ADMIN_PASSWORD?.trim();
+  if (raw) return raw;                          // موجودة وغير فارغة
   return process.env.NODE_ENV === 'production' ? undefined : 'admin';
 }
 const MAX_BODY_SIZE = 2 * 1024 * 1024;
