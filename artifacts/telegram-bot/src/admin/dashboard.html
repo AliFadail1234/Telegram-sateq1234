@@ -48,7 +48,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', Tahom
 /* ===== APP LAYOUT ===== */
 #app { display:none; }
 #sidebar {
-  position:fixed; top:0; right:0; height:100vh; width:var(--sidebar-w);
+  position:fixed; top:0; right:0; height:100vh; height:100dvh; width:var(--sidebar-w);
   background:var(--card); border-left:1px solid var(--border);
   display:flex; flex-direction:column; z-index:100; overflow:hidden;
   transition:transform .3s;
@@ -58,7 +58,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', Tahom
 .sidebar-logo .icon { font-size:28px; }
 .sidebar-logo .name { font-size:16px; font-weight:700; }
 .sidebar-logo .sub { font-size:11px; color:var(--muted); }
-.sidebar-nav { flex:1; min-height:0; padding:12px 8px; overflow-y:auto; }
+.sidebar-nav { flex:1; min-height:0; padding:12px 8px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 .nav-section { font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:.8px; padding:12px 8px 4px; }
 .nav-item {
   display:flex; align-items:center; gap:10px; padding:10px 12px;
@@ -233,6 +233,15 @@ tr:hover td { background:rgba(255,255,255,.02); }
   .form-row { flex-direction:column; }
   .form-row .form-group-inline { flex:1 1 100% !important; min-width:0; }
   .settings-section { font-size:13px; }
+  /* تصغير عناصر القائمة الجانبية لتسع جميع الأقسام */
+  .sidebar-header { padding:14px 12px 12px; }
+  .sidebar-logo .icon { font-size:22px; }
+  .sidebar-logo .name { font-size:14px; }
+  .nav-section { padding:8px 8px 2px; font-size:9px; }
+  .nav-item { padding:7px 10px; font-size:12px; margin-bottom:1px; }
+  .nav-item .nav-icon { font-size:14px; width:18px; }
+  .sidebar-footer { padding:10px 12px; }
+  .logout-btn { font-size:12px; padding:6px; }
 }
 </style>
 </head>
