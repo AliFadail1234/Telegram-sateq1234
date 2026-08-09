@@ -22,11 +22,22 @@ import {
   handleAdminCallback,
   handleAdminTextInput,
 } from './admin.js';
-import { getUserByTelegramId } from '../db/queries.js';
+import { getUserByTelegramId, isUserBanned } from '../db/queries.js';
 import { mainMenuKeyboard } from '../utils/keyboards.js';
 import { showEarnMenu } from '../utils/earn_menu.js';
 
 export function setupHandlers(bot: Telegraf): void {
+
+  // ========== middleware: منع المحظورين ==========
+
+  bot.use(async (ctx, next) => {
+    const telegramId = ctx.from?.id;
+    if (telegramId && await isUserBanned(telegramId)) {
+      await ctx.reply('🚫 حسابك محظور.');
+      return;
+    }
+    return next();
+  });
 
   // ========== أوامر ==========
 
