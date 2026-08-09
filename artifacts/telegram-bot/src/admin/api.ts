@@ -9,8 +9,8 @@ import {
   getTasksCount, getTotalPointsCirculated, getChartData, getRecentActivity,
   getTopUsers, getTopReferrers,
   searchUsers, searchUsersCount, getUserById,
-  getAllUsersForBroadcast, setUserPoints, banUser,
-  getUserTransactions, getAllTransactions, getTransactionsCount,
+  getAllUsersForBroadcast, exportAllUsers, setUserPoints, banUser,
+  getUserTransactions, getAllTransactions, getTransactionsCount, exportAllTransactions,
   getActiveChannels, getAllChannels, createChannel, deleteChannel,
   updateChannelPoints, toggleChannelActive, getChannelCompletionsCount,
   getActiveCampaigns, getCompletedCampaigns,
@@ -251,6 +251,49 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
       const userId = parseInt(userTxMatch[1]!, 10);
       const transactions = await getUserTransactions(userId, 50);
       json(req, res, 200, transactions);
+      return true;
+    }
+
+    // ===== تصدير CSV =====
+    if (apiPath === '/export/users' && method === 'GET') {
+      const users = await exportAllUsers();
+      const header = 'id,telegram_id,username,first_name,last_name,points,is_banned,referral_count,referrer_id,created_at';
+      const escape = (v: unknown) => {
+        const s = v == null ? '' : String(v);
+        return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const rows = users.map(u =>
+        [u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.points, u.is_banned, u.referral_count, u.referrer_id, u.created_at]
+          .map(escape).join(',')
+      );
+      const csv = [header, ...rows].join('\n');
+      setCors(req, res);
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="users.csv"',
+      });
+      res.end('\uFEFF' + csv); // BOM for Excel compatibility
+      return true;
+    }
+
+    if (apiPath === '/export/transactions' && method === 'GET') {
+      const txs = await exportAllTransactions();
+      const header = 'id,user_id,type,amount,description,related_id,created_at';
+      const escape = (v: unknown) => {
+        const s = v == null ? '' : String(v);
+        return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const rows = txs.map(t =>
+        [t.id, t.user_id, t.type, t.amount, t.description, t.related_id, t.created_at]
+          .map(escape).join(',')
+      );
+      const csv = [header, ...rows].join('\n');
+      setCors(req, res);
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="transactions.csv"',
+      });
+      res.end('\uFEFF' + csv); // BOM for Excel compatibility
       return true;
     }
 

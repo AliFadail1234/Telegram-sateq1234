@@ -335,6 +335,7 @@ tr:hover td { background:rgba(255,255,255,.02); }
         <input class="search-input" id="user-search" placeholder="🔍 بحث بالاسم أو المعرف أو الآيدي..." oninput="debounce(()=>loadUsers(1),400)">
         <button class="btn btn-gray btn-sm" onclick="loadUsers(1)">بحث</button>
         <span id="users-count" style="color:var(--muted);font-size:12px;margin-right:auto"></span>
+        <button class="btn btn-green btn-sm" onclick="exportCSV('users')" title="تصدير جميع المستخدمين">⬇️ تصدير CSV</button>
       </div>
 
       <div class="table-card">
@@ -431,6 +432,7 @@ tr:hover td { background:rgba(255,255,255,.02); }
         <div class="table-header">
           <div class="table-title">📝 سجل المعاملات</div>
           <button class="btn btn-gray btn-sm" onclick="loadPoints(1)">🔄 تحديث</button>
+          <button class="btn btn-green btn-sm" onclick="exportCSV('transactions')" title="تصدير جميع المعاملات">⬇️ تصدير CSV</button>
         </div>
         <div class="table-wrap"><table>
           <thead><tr><th>#</th><th>المستخدم</th><th>النوع</th><th>القيمة</th><th>الوصف</th><th>التاريخ</th></tr></thead>
@@ -779,6 +781,31 @@ async function apiJson(path, opts = {}) {
   const r = await api(path, opts);
   if (!r) return null;
   try { return await r.json(); } catch { return null; }
+}
+
+function exportCSV(type) {
+  const url = '/admin/api/export/' + type;
+  const a = document.createElement('a');
+  a.href = url + '?token=' + encodeURIComponent(TOKEN);
+  a.setAttribute('download', type + '.csv');
+  // Use fetch with Authorization header and create an object URL
+  fetch(url, { headers: { 'Authorization': 'Bearer ' + TOKEN } })
+    .then(r => {
+      if (r.status === 401) { showToast('غير مصرح', 'error'); return null; }
+      return r.blob();
+    })
+    .then(blob => {
+      if (!blob) return;
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = type + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
+    })
+    .catch(() => showToast('فشل التصدير', 'error'));
 }
 
 // ===== تهيئة التطبيق =====

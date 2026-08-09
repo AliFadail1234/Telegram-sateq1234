@@ -274,6 +274,11 @@ export async function getAllUsers(limit = 100, offset = 0): Promise<User[]> {
   return rows.map(toUser);
 }
 
+export async function exportAllUsers(): Promise<User[]> {
+  const { rows } = await pool.query('SELECT * FROM users ORDER BY id ASC');
+  return rows.map(toUser);
+}
+
 export async function getAllUsersForBroadcast(): Promise<{ id: number; telegram_id: number }[]> {
   const { rows } = await pool.query('SELECT id, telegram_id FROM users WHERE is_banned = 0 ORDER BY id');
   return rows.map(r => ({ id: Number(r.id), telegram_id: Number(r.telegram_id) }));
@@ -645,6 +650,11 @@ export async function getAllTransactions(limit = 100, offset = 0): Promise<Point
     'SELECT * FROM point_transactions ORDER BY created_at DESC LIMIT $1 OFFSET $2',
     [limit, offset],
   );
+  return rows.map(toTransaction);
+}
+
+export async function exportAllTransactions(): Promise<PointTransaction[]> {
+  const { rows } = await pool.query('SELECT * FROM point_transactions ORDER BY id ASC');
   return rows.map(toTransaction);
 }
 
