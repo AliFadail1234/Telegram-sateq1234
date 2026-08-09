@@ -300,6 +300,14 @@ export async function isUserBanned(telegramId: number): Promise<boolean> {
   return rows[0] ? Number(rows[0].is_banned) === 1 : false;
 }
 
+export async function getUserRank(userId: number): Promise<number> {
+  const { rows } = await pool.query(
+    'SELECT COUNT(*) + 1 AS rank FROM users WHERE points > (SELECT points FROM users WHERE id = $1)',
+    [userId],
+  );
+  return parseInt(rows[0]?.rank ?? '0', 10);
+}
+
 export async function getTopUsers(limit = 10): Promise<User[]> {
   const { rows } = await pool.query('SELECT * FROM users ORDER BY points DESC LIMIT $1', [limit]);
   return rows.map(toUser);

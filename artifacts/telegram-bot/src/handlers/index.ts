@@ -7,6 +7,7 @@ import { handleBalance } from './balance.js';
 import { handleAccount } from './account.js';
 import { handleTasks, handleEarnTasks, handleCheckChannel, handleCheckCampaign, handleSkipChannel, handleSkipCampaign } from './tasks.js';
 import { handleDailyBonus, handleDailyBonusMenu } from './daily.js';
+import { handleLeaderboard } from './leaderboard.js';
 import {
   handleSendPoints,
   handleSendPointsText,
@@ -69,6 +70,7 @@ export function setupHandlers(bot: Telegraf): void {
   bot.hears('⭐ كسب نقاط', handleTasks);
   bot.hears('☀️ مكافأة يومية', handleDailyBonusMenu);
   bot.hears('💸 إرسال نقاط', handleSendPoints);
+  bot.hears('🏆 المتصدرون', handleLeaderboard);
   bot.hears('📢 ترويج قناتي', handlePromote);
   bot.hears('👤 حسابي', handleAccount);
   bot.hears('🎁 دعوة الأصدقاء', handleReferral);
@@ -176,6 +178,10 @@ export function setupHandlers(bot: Telegraf): void {
     // تأكيد/إلغاء إرسال النقاط
     if (data === 'send_confirm') { await handleSendConfirm(ctx); return; }
     if (data === 'send_cancel') { await handleSendCancel(ctx); return; }
+
+    // المتصدرون
+    if (data === 'leaderboard_refresh') { await handleLeaderboard(ctx); return; }
+    if (data === 'leaderboard_close') { try { await ctx.deleteMessage(); } catch {} await ctx.answerCbQuery(); return; }
 
     // زر التحقق من الاشتراك الإجباري
     if (data === 'mandatory_verify') {
