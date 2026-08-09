@@ -1,5 +1,5 @@
 import type { Context } from 'telegraf';
-import { getUserByTelegramId, claimDailyBonus, getUserById } from '../db/queries.js';
+import { getUserByTelegramId, claimDailyBonus, getUserById, getSetting } from '../db/queries.js';
 import { DAILY_BONUS_POINTS } from '../config/pricing.js';
 
 export async function handleDailyBonus(ctx: Context): Promise<void> {
@@ -9,7 +9,10 @@ export async function handleDailyBonus(ctx: Context): Promise<void> {
   const user = await getUserByTelegramId(from.id);
   if (!user) { await ctx.answerCbQuery('⚠️ أرسل /start أولاً.'); return; }
 
-  const result = await claimDailyBonus(user.id, DAILY_BONUS_POINTS);
+  const bonusPointsStr = await getSetting('daily_bonus_points');
+  const bonusPoints = bonusPointsStr ? parseInt(bonusPointsStr, 10) : DAILY_BONUS_POINTS;
+
+  const result = await claimDailyBonus(user.id, bonusPoints);
 
   if (!result.success) {
     const now = new Date();
@@ -28,9 +31,18 @@ export async function handleDailyBonus(ctx: Context): Promise<void> {
   }
 
   const updated = (await getUserById(user.id))!;
-  await ctx.answerCbQuery(`✅ تم إضافة ${DAILY_BONUS_POINTS} نقاط!`);
-  await ctx.editMessageText(
-    `🎁 مبروك! استلمت مكافأتك اليومية\n\n💰 تمت إضافة: ${DAILY_BONUS_POINTS} نقاط\n🏦 رصيدك الكلي: ${updated.points} نقطة\n\n⏰ عُد غداً لمكافأة جديدة!`,
-    { reply_markup: { inline_keyboard: [[{ text: '🔙 رجوع', callback_data: 'earn_menu' }]] } },
-  );
+  const name = user.first_name + (user.last_name ? ` ${user.last_name}` : '');
+
+  const msgTemplate = await getSetting('daily_bonus_msg');
+  const defaultMsg = `🎁 مبروك! استلمت مكافأتك اليومية\n\n💰 تمت إضافة: {points} نقاط\n🏦 رصيدك الكلي: {total} نقطة\n\n⏰ عُد غداً لمكافأة جديدة!`;
+  const text = (msgTemplate || defaultMsg)
+    .replace(/{name}/g, name)
+    .replace(/{points}/g, String(bonusPoints))
+    .replace(/{total}/g, String(updated.points));
+
+  await ctx.answerCbQuery(`✅ تم إضافة ${bonusPoints} نقاط!`);
+  await ctx.editMessageText(text, {
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [[{ text: '🔙 رجوع', callback_data: 'earn_menu' }]] },
+  });
 }

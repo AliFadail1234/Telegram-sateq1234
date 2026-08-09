@@ -11,17 +11,26 @@ import {
   recordCampaignSubscription,
   getChannelById,
   getCampaignById,
+  getSetting,
 } from '../db/queries.js';
 import { channelTaskKeyboard } from '../utils/keyboards.js';
 import {
   channelTaskMessage,
   campaignTaskMessage,
   noTasksMessage,
-  taskCompletedMessage,
   notSubscribedMessage,
 } from '../utils/messages.js';
 import { showEarnMenu } from '../utils/earn_menu.js';
 import { getCampaignSubscriptionPoints } from '../config/pricing.js';
+
+async function buildTaskCompletedText(channelName: string, points: number, total: number): Promise<string> {
+  const tmpl = await getSetting('task_complete_msg');
+  const def = `✅ تم التحقق من اشتراكك!\n\n📢 {name}\n💰 تمت إضافة: {points} نقطة\n🏦 رصيدك: {total} نقطة`;
+  return (tmpl || def)
+    .replace(/{name}/g, channelName)
+    .replace(/{points}/g, String(points))
+    .replace(/{total}/g, String(total));
+}
 
 // ========== تتبع المهام المتخطاة لكل مستخدم ==========
 const skippedChannels = new Map<number, Set<number>>();
@@ -199,7 +208,8 @@ export async function handleCheckChannel(ctx: Context, channelId: number): Promi
   const updated = (await getUserById(user.id))!;
 
   await ctx.answerCbQuery('✅ تم تسجيل اشتراكك!');
-  await ctx.editMessageText(taskCompletedMessage(channel.channel_name, channel.points_reward, updated.points), {
+  await ctx.editMessageText(await buildTaskCompletedText(channel.channel_name, channel.points_reward, updated.points), {
+    parse_mode: 'HTML',
     reply_markup: { inline_keyboard: [[{ text: '⭐ المهمة التالية', callback_data: 'earn_tasks' }], [{ text: '🔙 القائمة', callback_data: 'earn_menu' }]] },
   });
 }
@@ -252,7 +262,7 @@ export async function handleCheckCampaign(ctx: Context, campaignId: number): Pro
 
   const completedNote = campaignCompleted ? '\n\n🎉 اكتملت هذه الحملة!' : '';
   await ctx.editMessageText(
-    taskCompletedMessage(campaign.channel_name, pointsEarned, updated.points) + completedNote,
-    { reply_markup: { inline_keyboard: [[{ text: '⭐ المهمة التالية', callback_data: 'earn_tasks' }], [{ text: '🔙 القائمة', callback_data: 'earn_menu' }]] } },
+    (await buildTaskCompletedText(campaign.channel_name, pointsEarned, updated.points)) + completedNote,
+    { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '⭐ المهمة التالية', callback_data: 'earn_tasks' }], [{ text: '🔙 القائمة', callback_data: 'earn_menu' }]] } },
   );
 }

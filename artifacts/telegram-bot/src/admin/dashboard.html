@@ -195,6 +195,8 @@ tr:hover td { background:rgba(255,255,255,.02); }
 .tier-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
 .tier-row input { flex:1; padding:7px 10px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-size:13px; outline:none; }
 .tier-row input:focus { border-color:var(--accent); }
+.tier-header { display:flex; gap:8px; margin-bottom:4px; }
+.tier-header span { flex:1; font-size:11px; color:var(--muted); padding-right:4px; }
 
 /* ===== TOGGLE ===== */
 .toggle { display:inline-flex; align-items:center; cursor:pointer; gap:8px; }
@@ -587,22 +589,50 @@ tr:hover td { background:rgba(255,255,255,.02); }
     <div class="section" id="section-messages">
       <div class="section-title"><span>✉️</span> إدارة الرسائل والقوالب</div>
 
+      <!-- رسالة الترحيب -->
       <div class="form-card">
-        <div style="font-size:13px;font-weight:600;margin-bottom:6px;">رسالة الترحيب (/start)</div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
-          المتغيرات المتاحة: <code style="color:var(--accent)">{name}</code> اسم المستخدم &nbsp;|&nbsp;
-          <code style="color:var(--accent)">{username}</code> معرّفه &nbsp;|&nbsp;
-          <code style="color:var(--accent)">{points}</code> نقاطه
-        </p>
-        <div class="form-group-inline" style="margin-bottom:14px">
-          <textarea id="welcome-msg" rows="5" placeholder="مرحباً {name}! 👋"></textarea>
-        </div>
-        <button class="btn btn-green btn-sm" onclick="saveMessages()">💾 حفظ</button>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">👋 رسالة الترحيب (/start)</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">متغيرات: <code style="color:var(--accent)">{name}</code> الاسم &nbsp;|&nbsp; <code style="color:var(--accent)">{username}</code> المعرّف &nbsp;|&nbsp; <code style="color:var(--accent)">{points}</code> النقاط</p>
+        <textarea id="welcome-msg" rows="4" placeholder="مرحباً {name}! 👋&#10;أهلاً بك في بوت النقاط."></textarea>
+        <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="saveMsg('welcome_message','welcome-msg')">💾 حفظ</button>
       </div>
 
+      <!-- رسالة المكافأة اليومية -->
       <div class="form-card">
-        <div style="font-size:13px;font-weight:600;margin-bottom:14px">💡 نصائح للرسائل</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">☀️ رسالة المكافأة اليومية</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">متغيرات: <code style="color:var(--accent)">{name}</code> &nbsp;|&nbsp; <code style="color:var(--accent)">{points}</code> نقاط المكافأة &nbsp;|&nbsp; <code style="color:var(--accent)">{total}</code> الرصيد الكلي</p>
+        <textarea id="daily-bonus-msg" rows="4" placeholder="☀️ مكافأتك اليومية!&#10;&#10;تم إضافة {points} نقطة إلى رصيدك.&#10;💰 رصيدك الحالي: {total} نقطة"></textarea>
+        <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="saveMsg('daily_bonus_msg','daily-bonus-msg')">💾 حفظ</button>
+      </div>
+
+      <!-- رسالة إتمام المهمة -->
+      <div class="form-card">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">✅ رسالة إتمام مهمة الاشتراك</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">متغيرات: <code style="color:var(--accent)">{name}</code> اسم القناة &nbsp;|&nbsp; <code style="color:var(--accent)">{points}</code> النقاط المضافة &nbsp;|&nbsp; <code style="color:var(--accent)">{total}</code> الرصيد</p>
+        <textarea id="task-complete-msg" rows="4" placeholder="✅ تم التحقق من اشتراكك!&#10;&#10;📢 {name}&#10;💰 تمت إضافة {points} نقطة&#10;🏦 رصيدك: {total} نقطة"></textarea>
+        <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="saveMsg('task_complete_msg','task-complete-msg')">💾 حفظ</button>
+      </div>
+
+      <!-- رسالة مكافأة الدعوة -->
+      <div class="form-card">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">🔗 رسالة مكافأة الدعوة (للمُحيل)</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">متغيرات: <code style="color:var(--accent)">{name}</code> اسم المدعو &nbsp;|&nbsp; <code style="color:var(--accent)">{points}</code> نقاط المكافأة &nbsp;|&nbsp; <code style="color:var(--accent)">{total}</code> الرصيد</p>
+        <textarea id="referral-notify-msg" rows="4" placeholder="🎉 دعوة ناجحة!&#10;&#10;انضم {name} عبر رابطك!&#10;💰 تم إضافة {points} نقطة لك.&#10;🏦 رصيدك: {total} نقطة"></textarea>
+        <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="saveMsg('referral_notify_msg','referral-notify-msg')">💾 حفظ</button>
+      </div>
+
+      <!-- رسالة شراء النقاط -->
+      <div class="form-card">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">💰 رسالة شراء النقاط</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">متغيرات: <code style="color:var(--accent)">{name}</code> اسم المستخدم &nbsp;|&nbsp; <code style="color:var(--accent)">{points}</code> رصيده &nbsp;|&nbsp; <code style="color:var(--accent)">{contact}</code> معلومات التواصل</p>
+        <textarea id="buy-points-msg" rows="4" placeholder="💰 شراء النقاط&#10;&#10;👤 مرحباً {name}!&#10;💰 رصيدك الحالي: {points} نقطة&#10;&#10;للشراء تواصل مع: {contact}"></textarea>
+        <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="saveMsg('buy_points_msg','buy-points-msg')">💾 حفظ</button>
+      </div>
+
+      <!-- نصائح التنسيق -->
+      <div class="form-card">
+        <div style="font-size:13px;font-weight:600;margin-bottom:14px">💡 تنسيق HTML المدعوم</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
           <div style="padding:10px;background:var(--bg);border-radius:var(--radius-sm)">
             <div style="font-size:11px;color:var(--muted);margin-bottom:4px">نص عريض</div>
             <code style="font-size:12px;color:var(--accent)">&lt;b&gt;النص&lt;/b&gt;</code>
@@ -643,9 +673,13 @@ tr:hover td { background:rgba(255,255,255,.02); }
               <label>مكافأة الدعوة (نقاط)</label>
               <input id="set-referral-reward" type="number" min="0" placeholder="10">
             </div>
-            <div class="form-group-inline" style="margin-bottom:16px">
+            <div class="form-group-inline" style="margin-bottom:12px">
               <label>الحد الأدنى للسحب (نقاط)</label>
               <input id="set-min-withdraw" type="number" min="1" placeholder="50">
+            </div>
+            <div class="form-group-inline" style="margin-bottom:16px">
+              <label>💰 يوزر/رابط بيع النقاط</label>
+              <input id="set-buy-contact" type="text" placeholder="@username أو https://t.me/...">
             </div>
             <button class="btn btn-green" onclick="saveGeneralSettings()">💾 حفظ الإعدادات</button>
           </div>
@@ -658,7 +692,8 @@ tr:hover td { background:rgba(255,255,255,.02); }
               <label>نقاط الاشتراك في كل حملة</label>
               <input id="set-points-per-member" type="number" min="1" placeholder="1">
             </div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:10px">جدول التسعير (المشتركون → النقاط):</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px">جدول التسعير (المشتركون → النقاط):</div>
+            <div class="tier-header"><span>👥 عدد المشتركين</span><span>💎 النقاط المطلوبة</span><span style="flex:0;width:50px"></span></div>
             <div id="tiers-container"></div>
             <div style="display:flex;gap:8px;margin-top:10px">
               <button class="btn btn-gray btn-sm" onclick="addTierRow()">➕ إضافة شريحة</button>
@@ -1386,14 +1421,24 @@ async function sendBroadcastMsg() {
 async function loadMessages() {
   const settings = await apiJson('/settings');
   if (!settings) return;
-  if (settings.welcome_message) document.getElementById('welcome-msg').value = settings.welcome_message;
+  const map = {
+    'welcome_message': 'welcome-msg',
+    'daily_bonus_msg': 'daily-bonus-msg',
+    'task_complete_msg': 'task-complete-msg',
+    'referral_notify_msg': 'referral-notify-msg',
+    'buy_points_msg': 'buy-points-msg',
+  };
+  Object.entries(map).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el && settings[key]) el.value = settings[key];
+  });
 }
 
-async function saveMessages() {
-  const welcome_message = document.getElementById('welcome-msg').value.trim();
-  if (!welcome_message) { showToast('الرسالة فارغة', 'error'); return; }
-  const r = await api('/settings', { method: 'PUT', body: JSON.stringify({ welcome_message }) });
-  if (r && r.ok) showToast('تم حفظ الرسائل ✅');
+async function saveMsg(key, id) {
+  const val = document.getElementById(id).value.trim();
+  if (!val) { showToast('الرسالة فارغة', 'error'); return; }
+  const r = await api('/settings', { method: 'PUT', body: JSON.stringify({ [key]: val }) });
+  if (r && r.ok) showToast('تم الحفظ ✅');
   else showToast('فشل الحفظ', 'error');
 }
 
@@ -1409,6 +1454,7 @@ async function loadSettings() {
   if (settings.daily_bonus_points) document.getElementById('set-daily-bonus').value = settings.daily_bonus_points;
   if (settings.referral_reward) document.getElementById('set-referral-reward').value = settings.referral_reward;
   if (settings.min_withdraw) document.getElementById('set-min-withdraw').value = settings.min_withdraw;
+  if (settings.buy_points_contact) document.getElementById('set-buy-contact').value = settings.buy_points_contact;
 
   if (pricing) {
     document.getElementById('set-points-per-member').value = pricing.pointsPerMember || 1;
@@ -1426,6 +1472,7 @@ async function saveGeneralSettings() {
     daily_bonus_points: document.getElementById('set-daily-bonus').value,
     referral_reward: document.getElementById('set-referral-reward').value,
     min_withdraw: document.getElementById('set-min-withdraw').value,
+    buy_points_contact: document.getElementById('set-buy-contact').value.trim(),
   };
   const r = await api('/settings', { method: 'PUT', body: JSON.stringify(data) });
   if (r && r.ok) {

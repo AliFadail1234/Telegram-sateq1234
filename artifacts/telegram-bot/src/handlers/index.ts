@@ -1,6 +1,7 @@
 import type { Telegraf } from 'telegraf';
 import type { Context } from 'telegraf';
 import { handleStart } from './start.js';
+import { handleBuyPoints } from './buy_points.js';
 import { handleBalance } from './balance.js';
 import { handleAccount } from './account.js';
 import { handleTasks, handleEarnTasks, handleCheckChannel, handleCheckCampaign, handleSkipChannel, handleSkipCampaign } from './tasks.js';
@@ -59,6 +60,7 @@ export function setupHandlers(bot: Telegraf): void {
   bot.hears('📢 ترويج قناتي', handlePromote);
   bot.hears('👤 حسابي', handleAccount);
   bot.hears('🎁 دعوة الأصدقاء', handleReferral);
+  bot.hears('💰 شراء نقاط', handleBuyPoints);
 
   // ========== Callback queries ==========
 

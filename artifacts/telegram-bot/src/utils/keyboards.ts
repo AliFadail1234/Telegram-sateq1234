@@ -6,7 +6,7 @@ import type { PricingTier } from '../config/pricing.js';
 export const mainMenuKeyboard = Markup.keyboard([
   ['📊 رصيدي', '⭐ كسب نقاط'],
   ['📢 ترويج قناتي', '👤 حسابي'],
-  ['🎁 دعوة الأصدقاء'],
+  ['🎁 دعوة الأصدقاء', '💰 شراء نقاط'],
 ]).resize();
 
 // ===== الأدمن =====
