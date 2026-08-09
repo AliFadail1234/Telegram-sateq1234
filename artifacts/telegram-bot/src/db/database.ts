@@ -5,10 +5,10 @@ if (!DATABASE_URL) {
   throw new Error('❌ DATABASE_URL غير محدد في متغيرات البيئة.');
 }
 
-const useSsl = process.env.DB_SSL === 'true' || process.env.NODE_ENV === 'production';
+const useSsl = process.env.DB_SSL !== 'false' && (process.env.DATABASE_URL?.includes('supabase') || process.env.NODE_ENV === 'production');
 export const pool = new Pool({
   connectionString: DATABASE_URL,
-  ssl: useSsl ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } : undefined,
+  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
