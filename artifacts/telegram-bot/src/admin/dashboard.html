@@ -50,7 +50,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', Tahom
 #sidebar {
   position:fixed; top:0; right:0; height:100vh; height:100dvh; width:var(--sidebar-w);
   background:var(--card); border-left:1px solid var(--border);
-  display:flex; flex-direction:column; z-index:100; overflow:hidden;
+  display:flex; flex-direction:column; z-index:160; overflow:hidden;
   transition:transform .3s;
 }
 .sidebar-header { padding:20px 16px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
@@ -215,7 +215,7 @@ tr:hover td { background:rgba(255,255,255,.02); }
 /* overlay لإغلاق الشريط الجانبي */
 #sidebar-overlay {
   display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
-  z-index:149; -webkit-tap-highlight-color:transparent;
+  z-index:150; -webkit-tap-highlight-color:transparent;
 }
 #sidebar-overlay.visible { display:block; }
 
