@@ -1624,7 +1624,7 @@ async function createGiftLink() {
   if (!maxClaims || maxClaims < 1) { showToast('أدخل عدد أعضاء صحيح', 'error'); return; }
   const body = { points, max_claims: maxClaims };
   if (description) body.description = description;
-  const r = await api('/gifts', { method: 'POST', body: JSON.stringify(body) });
+  const r = await apiJson('/gifts', { method: 'POST', body: JSON.stringify(body) });
   if (!r || !r.id) { showToast('فشل إنشاء الهدية', 'error'); return; }
   const link = `https://t.me/${_botUsername || 'bot'}?start=gift_${r.id}`;
   document.getElementById('gift-link-text').textContent = link;
