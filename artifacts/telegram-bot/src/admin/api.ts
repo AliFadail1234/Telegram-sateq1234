@@ -30,7 +30,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_HTML = path.join(__dirname, 'dashboard.html');
 const DASHBOARD_HTML_FALLBACK = path.join(__dirname, '../src/admin/dashboard.html');
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? (process.env.NODE_ENV === 'production' ? undefined : 'admin');
+function getAdminPassword(): string | undefined {
+  return process.env.ADMIN_PASSWORD ?? (process.env.NODE_ENV === 'production' ? undefined : 'admin');
+}
 const MAX_BODY_SIZE = 2 * 1024 * 1024;
 const ADMIN_RATE_LIMIT_WINDOW_MS = 60_000;
 const ADMIN_RATE_LIMIT_MAX_REQUESTS = 120;
@@ -70,13 +72,14 @@ function safeCompare(a: string, b: string): boolean {
 }
 
 function isAuthorized(req: IncomingMessage): boolean {
-  if (!ADMIN_PASSWORD) return false;
+  const pw = getAdminPassword();
+  if (!pw) return false;
   const auth = String(req.headers['authorization'] ?? '');
-  if (auth.startsWith('Bearer ')) return safeCompare(auth.slice(7), ADMIN_PASSWORD);
+  if (auth.startsWith('Bearer ')) return safeCompare(auth.slice(7), pw);
   if (auth.startsWith('Basic ')) {
     const decoded = Buffer.from(auth.slice(6), 'base64').toString('utf8');
     const [, pwd] = decoded.split(':');
-    return safeCompare(pwd ?? '', ADMIN_PASSWORD);
+    return safeCompare(pwd ?? '', pw);
   }
   return false;
 }
