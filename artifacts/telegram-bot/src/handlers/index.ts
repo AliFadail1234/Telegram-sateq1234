@@ -71,6 +71,9 @@ export function setupHandlers(bot: Telegraf): void {
   bot.hears('☀️ مكافأة يومية', handleDailyBonusMenu);
   bot.hears('💸 إرسال نقاط', handleSendPoints);
   bot.hears('🏆 المتصدرون', handleLeaderboard);
+  bot.hears('💵 سحب نقاط', async (ctx) => {
+    await ctx.reply('🚧 هذه الميزة ستتوفر قريباً...');
+  });
   bot.hears('📢 ترويج قناتي', handlePromote);
   bot.hears('👤 حسابي', handleAccount);
   bot.hears('🎁 دعوة الأصدقاء', handleReferral);
