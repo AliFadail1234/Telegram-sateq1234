@@ -15,6 +15,7 @@ export const pool = new Pool({
 });
 
 export async function initDatabase(): Promise<void> {
+  // ===== الجداول الأساسية =====
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id           SERIAL PRIMARY KEY,
@@ -77,8 +78,51 @@ export async function initDatabase(): Promise<void> {
       value      TEXT NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
 
+  // ===== الجداول الجديدة =====
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS point_transactions (
+      id          SERIAL PRIMARY KEY,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type        TEXT NOT NULL,
+      amount      INTEGER NOT NULL,
+      description TEXT,
+      related_id  INTEGER,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS admins (
+      id          SERIAL PRIMARY KEY,
+      telegram_id BIGINT UNIQUE NOT NULL,
+      username    TEXT,
+      permissions TEXT NOT NULL DEFAULT 'all',
+      added_by    BIGINT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS broadcasts (
+      id           SERIAL PRIMARY KEY,
+      message      TEXT NOT NULL,
+      status       TEXT NOT NULL DEFAULT 'sent',
+      total_sent   INTEGER NOT NULL DEFAULT 0,
+      total_failed INTEGER NOT NULL DEFAULT 0,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // ===== أعمدة جديدة على جدول المستخدمين =====
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned SMALLINT NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_count INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS referrer_id INTEGER;
+  `);
+
+  // ===== الفهارس =====
+  await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
+    CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at);
+    CREATE INDEX IF NOT EXISTS idx_users_points ON users(points DESC);
     CREATE INDEX IF NOT EXISTS idx_completed_tasks_user_id ON completed_tasks(user_id);
     CREATE INDEX IF NOT EXISTS idx_completed_tasks_channel_id ON completed_tasks(channel_id);
     CREATE INDEX IF NOT EXISTS idx_campaign_subscriptions_user_id ON campaign_subscriptions(user_id);
@@ -86,13 +130,20 @@ export async function initDatabase(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status);
     CREATE INDEX IF NOT EXISTS idx_campaigns_user_id ON campaigns(user_id);
     CREATE INDEX IF NOT EXISTS idx_daily_claims_user_id ON daily_claims(user_id);
+    CREATE INDEX IF NOT EXISTS idx_point_transactions_user_id ON point_transactions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_point_transactions_created_at ON point_transactions(created_at DESC);
   `);
 
-  // تهيئة القيم الافتراضية للإعدادات إن لم تكن موجودة
+  // ===== القيم الافتراضية للإعدادات =====
   await pool.query(`
     INSERT INTO settings (key, value) VALUES
       ('campaign_points', '1'),
-      ('pricing_tiers', '[{"subscribers":5,"points":10,"label":"5 مشتركين  — 10 نقاط"},{"subscribers":10,"points":20,"label":"10 مشتركين — 20 نقطة"},{"subscribers":20,"points":40,"label":"20 مشتركاً — 40 نقطة"},{"subscribers":50,"points":100,"label":"50 مشتركاً — 100 نقطة"}]')
+      ('daily_bonus_points', '5'),
+      ('referral_reward', '10'),
+      ('min_withdraw', '50'),
+      ('bot_name', 'بوت النقاط'),
+      ('welcome_message', 'مرحباً {name}! 👋\nأهلاً بك في بوت النقاط.\nاشترك في القنوات واكسب نقاطاً لترويج قناتك!'),
+      ('pricing_tiers', '[{"subscribers":5,"points":10,"label":"5 مشتركين — 10 نقاط"},{"subscribers":10,"points":20,"label":"10 مشتركين — 20 نقطة"},{"subscribers":20,"points":40,"label":"20 مشتركاً — 40 نقطة"},{"subscribers":50,"points":100,"label":"50 مشتركاً — 100 نقطة"}]')
     ON CONFLICT (key) DO NOTHING;
   `);
 
