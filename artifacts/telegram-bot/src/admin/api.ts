@@ -1,4 +1,4 @@
-﻿import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
@@ -189,7 +189,7 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
 
   const apiPath = url.replace('/admin/api', '');
 
-  // ===== ط¥ط­طµط§ط¦ظٹط§طھ =====
+  // ===== إحصائيات =====
   if (apiPath === '/stats' && method === 'GET') {
     const [users, channels, campaigns, tasks, totalPoints] = await Promise.all([
       getUsersCount(),
@@ -202,13 +202,13 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
     return true;
   }
 
-  // ===== ط§ظ„ظ…ط³طھط®ط¯ظ…ظˆظ† =====
+  // ===== المستخدمون =====
   if (apiPath === '/users' && method === 'GET') {
     json(req, res, 200, await getAllUsers(200));
     return true;
   }
 
-  // ===== ط§ظ„طھط³ط¹ظٹط± =====
+  // ===== التسعير =====
   if (apiPath === '/pricing' && method === 'GET') {
     const [pointsPerMember, tiers] = await Promise.all([
       getPointsPerMember(),
@@ -251,7 +251,7 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
         points < 1 ||
         seenSubscribers.has(subscribers)
       ) {
-        json(req, res, 400, { error: 'طھط­ظ‚ظ‚ ظ…ظ† ط£ط¹ط¯ط§ط¯ ط§ظ„ظ…ط´طھط±ظƒظٹظ† ظˆط§ظ„ظ†ظ‚ط§ط· ظˆطھط£ظƒط¯ ظ…ظ† ط¹ط¯ظ… طھظƒط±ط§ط± ط§ظ„ظپط¦ط§طھ' });
+        json(req, res, 400, { error: 'تحقق من أعداد المشتركين والنقاط وتأكد من عدم تكرار الفئات' });
         return true;
       }
 
@@ -259,7 +259,7 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
       tiers.push({
         subscribers,
         points,
-        label: `${subscribers} ظ…ط´طھط±ظƒظٹظ† â€” ${points} ظ†ظ‚ط·ط©`,
+        label: `${subscribers} مشتركين — ${points} نقطة`,
       });
     }
 
@@ -274,13 +274,13 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
     const userId = parseInt(userPointsMatch[1]!, 10);
     const body = await readBody(req);
     const points = Number(body['points']);
-    if (isNaN(points) || points < 0) { json(req, res, 400, { error: 'ظ‚ظٹظ…ط© ظ†ظ‚ط§ط· ط؛ظٹط± طµط­ظٹط­ط©' }); return true; }
+    if (isNaN(points) || points < 0) { json(req, res, 400, { error: 'قيمة نقاط غير صحيحة' }); return true; }
     await setUserPoints(userId, points);
     json(req, res, 200, { ok: true });
     return true;
   }
 
-  // ===== ط§ظ„ظ‚ظ†ظˆط§طھ =====
+  // ===== القنوات =====
   if (apiPath === '/channels' && method === 'GET') {
     json(req, res, 200, await getActiveChannels());
     return true;
@@ -291,7 +291,7 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
     const username = String(body['username'] ?? '').replace(/^@/, '').replace(/^https?:\/\/t\.me\//i, '').trim();
     const points = parseInt(String(body['points'] ?? '0'), 10);
     if (!username || isNaN(points) || points < 1) {
-      json(req, res, 400, { error: 'ط£ط¯ط®ظ„ ظ…ط¹ط±ظ‘ظپ ط§ظ„ظ‚ظ†ط§ط© ظˆط§ظ„ظ†ظ‚ط§ط·' });
+      json(req, res, 400, { error: 'أدخل معرّف القناة والنقاط' });
       return true;
     }
     const channel = await createChannel(username, username, points);
@@ -310,14 +310,14 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
     if (method === 'PATCH') {
       const body = await readBody(req);
       const points = parseInt(String(body['points'] ?? '0'), 10);
-      if (isNaN(points) || points < 1) { json(req, res, 400, { error: 'ظ‚ظٹظ…ط© ظ†ظ‚ط§ط· ط؛ظٹط± طµط­ظٹط­ط©' }); return true; }
+      if (isNaN(points) || points < 1) { json(req, res, 400, { error: 'قيمة نقاط غير صحيحة' }); return true; }
       await updateChannelPoints(id, points);
       json(req, res, 200, { ok: true });
       return true;
     }
   }
 
-  // ===== ط­ظ…ظ„ط§طھ (طµط§ظ„ط­ ظ„ظ„ظˆط§ط¬ظ‡ط© ط§ظ„ظ‚ط¯ظٹظ…ط© ظˆط§ظ„ط¬ط¯ظٹط¯ط©) =====
+  // ===== حملات (صالح للواجهة القديمة والجديدة) =====
   if (apiPath === '/campaigns' && method === 'GET') {
     try {
       const [active, completed] = await Promise.all([
@@ -327,12 +327,12 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
       json(req, res, 200, { active, completed });
     } catch (err) {
       console.error('Error fetching campaigns:', err);
-      json(req, res, 500, { error: 'ظپط´ظ„ طھط­ظ…ظٹظ„ ط§ظ„ط­ظ…ظ„ط§طھ' });
+      json(req, res, 500, { error: 'فشل تحميل الحملات' });
     }
     return true;
   }
 
-  // ===== ط§ظ„ط­ظ…ظ„ط§طھ (ظ…ط³ط§ط±ط§طھ ظ…ظپطµظ‘ظ„ط©) =====
+  // ===== الحملات (مسارات مفصّلة) =====
   if (apiPath === '/campaigns/active' && method === 'GET') {
     json(req, res, 200, await getActiveCampaigns());
     return true;
@@ -357,7 +357,7 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
     return true;
   }
 
-  json(req, res, 404, { error: 'ظ…ط³ط§ط± ط؛ظٹط± ظ…ظˆط¬ظˆط¯' });
+  json(req, res, 404, { error: 'مسار غير موجود' });
   return true;
 }
 
