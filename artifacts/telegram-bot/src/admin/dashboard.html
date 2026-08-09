@@ -1249,12 +1249,12 @@ async function loadMandatoryChannels() {
 }
 
 async function addMandatoryChannel() {
-  const username = document.getElementById('mndt-username').value.trim().replace(/^https?:\/\/t\.me\//,'');
+  const username = document.getElementById('mndt-username').value.trim().replace(/^https?:\/\/t\.me\//,'').replace(/^@/,'');
   const name = document.getElementById('mndt-name').value.trim();
   const maxVal = document.getElementById('mndt-max').value;
   const max_joins = maxVal ? parseInt(maxVal, 10) : null;
   if (!username) { showToast('أدخل معرّف القناة', 'error'); return; }
-  const r = await api('/mandatory-channels', { method: 'POST', body: JSON.stringify({ channel_username: username, channel_name: name, max_joins }) });
+  const r = await apiJson('/mandatory-channels', { method: 'POST', body: JSON.stringify({ channel_username: username, channel_name: name, max_joins }) });
   if (r && r.id) {
     showToast('✅ تمت الإضافة');
     document.getElementById('mndt-username').value = '';
