@@ -5,6 +5,7 @@ import type { PricingTier } from '../config/pricing.js';
 
 export const mainMenuKeyboard = Markup.keyboard([
   ['📊 رصيدي', '⭐ كسب نقاط'],
+  ['☀️ مكافأة يومية', '💸 إرسال نقاط'],
   ['📢 ترويج قناتي', '👤 حسابي'],
   ['🎁 دعوة الأصدقاء', '💰 شراء نقاط'],
 ]).resize();

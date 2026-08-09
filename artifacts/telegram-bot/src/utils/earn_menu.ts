@@ -1,5 +1,5 @@
 import type { Context } from 'telegraf';
-import { getUserByTelegramId, getDailyClaimStatus, getNextPendingChannel, getNextPendingCampaign } from '../db/queries.js';
+import { getUserByTelegramId, getDailyClaimStatus, getNextPendingChannel, getNextPendingCampaign, getSetting } from '../db/queries.js';
 
 export async function showEarnMenu(ctx: Context, editMode: boolean): Promise<void> {
   const from = ctx.from;
@@ -11,8 +11,11 @@ export async function showEarnMenu(ctx: Context, editMode: boolean): Promise<voi
     return;
   }
 
+  const intervalStr = await getSetting('daily_bonus_interval');
+  const intervalHours = intervalStr ? parseFloat(intervalStr) : 24;
+
   const [dailyStatus, hasChannelTask, hasCampaignTask] = await Promise.all([
-    getDailyClaimStatus(user.id),
+    getDailyClaimStatus(user.id, intervalHours),
     getNextPendingChannel(user.id).then(v => !!v),
     getNextPendingCampaign(user.id).then(v => !!v),
   ]);
@@ -21,15 +24,12 @@ export async function showEarnMenu(ctx: Context, editMode: boolean): Promise<voi
 
   let dailyBtnText: string;
   if (dailyStatus.canClaim) {
-    dailyBtnText = '🎁 استلم مكافأتك اليومية (+5 نقاط)';
+    dailyBtnText = `🎁 استلم مكافأتك (${intervalHours < 24 ? intervalHours < 1 ? Math.round(intervalHours * 60) + 'د' : intervalHours + 'س' : 'يومية'})`;
   } else {
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setUTCHours(24, 0, 0, 0);
-    const diffMs = tomorrow.getTime() - now.getTime();
-    const h = Math.floor(diffMs / 3600000);
-    const m = Math.floor((diffMs % 3600000) / 60000);
-    dailyBtnText = `⏰ المكافأة اليومية (بعد ${h}س ${m}د)`;
+    const ms = dailyStatus.msUntilNext;
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    dailyBtnText = h > 0 ? `⏰ المكافأة (بعد ${h}س ${m}د)` : `⏰ المكافأة (بعد ${m}د)`;
   }
 
   const keyboard = {

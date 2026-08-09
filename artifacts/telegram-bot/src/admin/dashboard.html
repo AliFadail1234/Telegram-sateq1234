@@ -753,6 +753,11 @@ tr:hover td { background:rgba(255,255,255,.02); }
               <input id="set-daily-bonus" type="number" min="1" placeholder="5">
             </div>
             <div class="form-group-inline" style="margin-bottom:12px">
+              <label>وقت المكافأة (بالساعات)</label>
+              <input id="set-bonus-interval" type="number" min="0.1" step="0.5" placeholder="24">
+              <p style="font-size:11px;color:var(--muted);margin-top:4px">24 = يومياً &nbsp;|&nbsp; 12 = كل 12 ساعة &nbsp;|&nbsp; 1 = كل ساعة &nbsp;|&nbsp; 0.5 = كل 30 دقيقة</p>
+            </div>
+            <div class="form-group-inline" style="margin-bottom:12px">
               <label>مكافأة الدعوة (نقاط)</label>
               <input id="set-referral-reward" type="number" min="0" placeholder="10">
             </div>
@@ -1643,6 +1648,7 @@ async function loadSettings() {
     document.getElementById('bot-name-display').textContent = settings.bot_name;
   }
   if (settings.daily_bonus_points) document.getElementById('set-daily-bonus').value = settings.daily_bonus_points;
+  document.getElementById('set-bonus-interval').value = settings.daily_bonus_interval ?? '24';
   if (settings.referral_reward) document.getElementById('set-referral-reward').value = settings.referral_reward;
   if (settings.min_withdraw) document.getElementById('set-min-withdraw').value = settings.min_withdraw;
   if (settings.buy_points_contact) document.getElementById('set-buy-contact').value = settings.buy_points_contact;
@@ -1661,6 +1667,7 @@ async function saveGeneralSettings() {
   const data = {
     bot_name: document.getElementById('set-bot-name').value.trim(),
     daily_bonus_points: document.getElementById('set-daily-bonus').value,
+    daily_bonus_interval: document.getElementById('set-bonus-interval').value,
     referral_reward: document.getElementById('set-referral-reward').value,
     min_withdraw: document.getElementById('set-min-withdraw').value,
     buy_points_contact: document.getElementById('set-buy-contact').value.trim(),

@@ -6,7 +6,15 @@ import { checkMandatoryChannel } from './mandatory.js';
 import { handleBalance } from './balance.js';
 import { handleAccount } from './account.js';
 import { handleTasks, handleEarnTasks, handleCheckChannel, handleCheckCampaign, handleSkipChannel, handleSkipCampaign } from './tasks.js';
-import { handleDailyBonus } from './daily.js';
+import { handleDailyBonus, handleDailyBonusMenu } from './daily.js';
+import {
+  handleSendPoints,
+  handleSendPointsText,
+  getSendState,
+  clearSendState,
+  handleSendConfirm,
+  handleSendCancel,
+} from './send_points.js';
 import { handleReferral } from './referral.js';
 import {
   handlePromote,
@@ -49,6 +57,7 @@ export function setupHandlers(bot: Telegraf): void {
   bot.command('cancel', async (ctx) => {
     const id = ctx.from?.id ?? 0;
     clearPromoteState(id);
+    clearSendState(id);
     const { clearAdminState } = await import('./admin.js');
     clearAdminState(id);
     await ctx.reply('🚫 تم الإلغاء.', mainMenuKeyboard);
@@ -58,6 +67,8 @@ export function setupHandlers(bot: Telegraf): void {
 
   bot.hears('📊 رصيدي', handleBalance);
   bot.hears('⭐ كسب نقاط', handleTasks);
+  bot.hears('☀️ مكافأة يومية', handleDailyBonusMenu);
+  bot.hears('💸 إرسال نقاط', handleSendPoints);
   bot.hears('📢 ترويج قناتي', handlePromote);
   bot.hears('👤 حسابي', handleAccount);
   bot.hears('🎁 دعوة الأصدقاء', handleReferral);
@@ -162,6 +173,10 @@ export function setupHandlers(bot: Telegraf): void {
       return;
     }
 
+    // تأكيد/إلغاء إرسال النقاط
+    if (data === 'send_confirm') { await handleSendConfirm(ctx); return; }
+    if (data === 'send_cancel') { await handleSendCancel(ctx); return; }
+
     // زر التحقق من الاشتراك الإجباري
     if (data === 'mandatory_verify') {
       const allowed = await checkMandatoryChannel(ctx);
@@ -194,6 +209,12 @@ export function setupHandlers(bot: Telegraf): void {
 
     // إدخالات الأدمن أولاً
     if (await handleAdminTextInput(ctx, text)) return;
+
+    // حالة إرسال النقاط
+    if (getSendState(from.id)) {
+      await handleSendPointsText(ctx, text);
+      return;
+    }
 
     // حالات ترويج القناة
     const promoteState = getPromoteState(from.id);

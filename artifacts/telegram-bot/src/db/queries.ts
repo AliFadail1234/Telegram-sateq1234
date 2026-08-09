@@ -692,35 +692,51 @@ export async function getBroadcasts(limit = 20): Promise<Broadcast[]> {
   }));
 }
 
-// ========== المكافأة اليومية ==========
+// ========== المكافأة اليومية (مبنية على الفترة الزمنية) ==========
 
-function getTodayUTC(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-export async function getDailyClaimStatus(userId: number): Promise<DailyClaimStatus> {
-  const today = getTodayUTC();
+export async function getDailyClaimStatus(userId: number, intervalHours: number = 24): Promise<{ canClaim: boolean; msUntilNext: number }> {
   const { rows } = await pool.query(
-    'SELECT claimed_date FROM daily_claims WHERE user_id = $1 AND claimed_date = $2',
-    [userId, today],
+    'SELECT claimed_at FROM daily_claims WHERE user_id = $1 ORDER BY claimed_at DESC LIMIT 1',
+    [userId],
   );
-  return { canClaim: rows.length === 0, lastClaimDate: rows[0]?.claimed_date ?? null };
+  if (!rows[0]) return { canClaim: true, msUntilNext: 0 };
+  const lastAt = new Date(rows[0].claimed_at).getTime();
+  const remaining = lastAt + intervalHours * 3600000 - Date.now();
+  return { canClaim: remaining <= 0, msUntilNext: Math.max(0, remaining) };
 }
 
-export async function claimDailyBonus(userId: number, points: number): Promise<{ success: boolean }> {
-  const today = getTodayUTC();
+/**
+ * يتحقق ويُنفّذ المطالبة بالمكافأة مع دعم الفترة الزمنية المخصصة.
+ * @param intervalHours  الفترة بالساعات (مثلاً 24 أو 12 أو 1)
+ * @returns success + msUntilNext (مدة الانتظار بالميلي ثانية إذا فشل)
+ */
+export async function claimDailyBonus(
+  userId: number,
+  points: number,
+  intervalHours: number = 24,
+): Promise<{ success: boolean; msUntilNext?: number }> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    try {
-      await client.query(
-        'INSERT INTO daily_claims (user_id, claimed_date, points_earned) VALUES ($1, $2, $3)',
-        [userId, today, points],
-      );
-    } catch {
-      await client.query('ROLLBACK');
-      return { success: false };
+    // أحدث مطالبة لهذا المستخدم
+    const { rows: last } = await client.query(
+      'SELECT claimed_at FROM daily_claims WHERE user_id = $1 ORDER BY claimed_at DESC LIMIT 1',
+      [userId],
+    );
+    if (last[0]) {
+      const lastAt = new Date(last[0].claimed_at).getTime();
+      const intervalMs = intervalHours * 3600 * 1000;
+      const remaining = lastAt + intervalMs - Date.now();
+      if (remaining > 0) {
+        await client.query('ROLLBACK');
+        return { success: false, msUntilNext: remaining };
+      }
     }
+    const today = new Date().toISOString().slice(0, 10);
+    await client.query(
+      'INSERT INTO daily_claims (user_id, claimed_date, points_earned) VALUES ($1, $2, $3)',
+      [userId, today, points],
+    );
     await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [points, userId]);
     await client.query('COMMIT');
     await addTransaction(userId, 'daily_bonus', points, 'مكافأة يومية');
@@ -728,6 +744,38 @@ export async function claimDailyBonus(userId: number, points: number): Promise<{
   } catch {
     await client.query('ROLLBACK');
     return { success: false };
+  } finally {
+    client.release();
+  }
+}
+
+// ========== تحويل النقاط بين المستخدمين ==========
+
+export async function transferPoints(
+  senderId: number,
+  recipientId: number,
+  amount: number,
+  commission: number,
+): Promise<'ok' | 'insufficient' | 'same_user'> {
+  if (senderId === recipientId) return 'same_user';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query('SELECT points FROM users WHERE id = $1 FOR UPDATE', [senderId]);
+    if (!rows[0] || rows[0].points < amount) {
+      await client.query('ROLLBACK');
+      return 'insufficient';
+    }
+    const recipientGets = amount - commission;
+    await client.query('UPDATE users SET points = points - $1 WHERE id = $2', [amount, senderId]);
+    await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [recipientGets, recipientId]);
+    await client.query('COMMIT');
+    await addTransaction(senderId, 'transfer_out', -amount, `تحويل نقاط إلى مستخدم (عمولة ${commission})`, recipientId);
+    await addTransaction(recipientId, 'transfer_in', recipientGets, 'استلام نقاط محوّلة', senderId);
+    return 'ok';
+  } catch {
+    await client.query('ROLLBACK');
+    throw new Error('خطأ في التحويل');
   } finally {
     client.release();
   }
