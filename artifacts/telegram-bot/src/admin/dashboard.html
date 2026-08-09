@@ -179,6 +179,14 @@
 let BASE = window.location.origin;
 let TOKEN = '';
 let usersData = [];
+let channelsData = [];
+let pricingData = null;
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+  }[ch]));
+}
 
 function showToast(msg, ttl = 3000) {
   const t = document.getElementById('toast');
@@ -201,6 +209,7 @@ function clearLoginError() { const el = document.getElementById('login-error'); 
 window.addEventListener('DOMContentLoaded', async () => {
   const serverInput = document.getElementById('server-input');
   if (serverInput) serverInput.value = BASE;
+  renderChannelForm();
   try {
     const saved = localStorage.getItem('admin_token');
     if (!saved) return;
@@ -260,6 +269,43 @@ function showTab(name, btn) {
   if (name === 'pricing') loadPricing();
 }
 
+function renderChannelForm() {
+  const form = document.getElementById('add-channel-form');
+  if (!form) return;
+  form.innerHTML = `
+    <div class="section">
+      <div class="section-header"><h3>إضافة قناة</h3></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input id="new-channel-username" class="search-bar" placeholder="@معرف القناة أو رابط t.me" style="flex:1;min-width:220px">
+        <input id="new-channel-points" class="search-bar" type="number" min="1" value="10" placeholder="النقاط" style="width:130px">
+        <button class="btn btn-green" onclick="addChannel()">إضافة</button>
+      </div>
+    </div>`;
+}
+
+async function addChannel() {
+  const username = document.getElementById('new-channel-username')?.value?.trim();
+  const points = Number(document.getElementById('new-channel-points')?.value);
+  if (!username || !Number.isInteger(points) || points < 1) {
+    showToast('أدخل معرف القناة والنقاط بشكل صحيح');
+    return;
+  }
+  try {
+    const r = await apiFetch('/admin/api/channels', {
+      method: 'POST',
+      body: JSON.stringify({ username, points })
+    });
+    const body = await readJsonSafe(r);
+    if (!r.ok) { showToast(body?.error || 'فشل إضافة القناة'); return; }
+    showToast('تمت إضافة القناة');
+    document.getElementById('new-channel-username').value = '';
+    loadChannels();
+  } catch (err) {
+    console.error('addChannel error', err);
+    showToast('فشل الاتصال بالخادم');
+  }
+}
+
 // ===== إحصائيات =====
 async function loadStats() {
   try {
@@ -284,13 +330,14 @@ async function loadChannels() {
       return;
     }
     const channels = await r.json();
+    channelsData = Array.isArray(channels) ? channels : [];
     if (!channels || !channels.length) { container.innerHTML = '<div class="empty">لا توجد قنوات بعد</div>'; return; }
     const rows = channels.map(c => `
       <tr>
         <td>${c.id}</td>
-        <td>${c.channel_username ? '@'+c.channel_username : c.channel_identifier || '-'}</td>
-        <td>${c.channel_name || '-'}</td>
-        <td><span id="pts-${c.id}">${c.points_reward ?? '-'}</span></td>
+        <td>${escapeHtml(c.channel_username ? '@'+c.channel_username : c.channel_identifier || '-')}</td>
+        <td>${escapeHtml(c.channel_name || '-')}</td>
+        <td><span id="pts-${c.id}">${escapeHtml(c.points_reward ?? '-')}</span></td>
         <td>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
             <button class="btn btn-blue" onclick="editChannel(${c.id})">✏️</button>
@@ -305,8 +352,26 @@ async function loadChannels() {
   } catch (err) { console.error('loadChannels error', err); container.innerHTML = '<div class="empty">فشل الاتصال بخادم القنوات</div>'; }
 }
 
-// Simple stubs for actions (they will call APIs if exist)
-function editChannel(id) { showToast('ميزة التعديل قيد التطوير'); }
+async function editChannel(id) {
+  const channel = channelsData.find(item => item.id === id);
+  const value = prompt('أدخل عدد النقاط الجديد:', String(channel?.points_reward ?? ''));
+  if (value === null) return;
+  const points = Number(value);
+  if (!Number.isInteger(points) || points < 1) { showToast('قيمة النقاط غير صحيحة'); return; }
+  try {
+    const r = await apiFetch(`/admin/api/channels/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ points })
+    });
+    const body = await readJsonSafe(r);
+    if (!r.ok) { showToast(body?.error || 'فشل تعديل القناة'); return; }
+    showToast('تم تحديث نقاط القناة');
+    loadChannels();
+  } catch (err) {
+    console.error('editChannel error', err);
+    showToast('فشل الاتصال بالخادم');
+  }
+}
 async function deleteChannel(id) {
   if (!confirm('هل تريد حذف القناة؟')) return;
   try {
@@ -335,13 +400,31 @@ async function loadCampaigns() {
     const completed = data.completed || data.completedCampaigns || data.completed_campaigns || [];
     if (activeEl) {
       if (!active.length) activeEl.innerHTML = '<div class="empty">لا توجد حملات نشطة</div>';
-      else activeEl.innerHTML = `<div class="table-wrap"><table><tr><th>#</th><th>الاسم</th><th>القناة</th><th>حالة</th></tr>${active.map(c=>`<tr><td>${c.id}</td><td>${c.title||c.name||'-'}</td><td>${c.channel_name||c.channel_username||'-'}</td><td>${c.status||'نشطة'}</td></tr>`).join('')}</table></div>`;
+      else activeEl.innerHTML = `<div class="table-wrap"><table><tr><th>#</th><th>القناة</th><th>التقدم</th><th>النقاط</th><th>إجراءات</th></tr>${active.map(c=>`<tr><td>${c.id}</td><td>${escapeHtml(c.channel_name||c.channel_username||'-')}</td><td>${c.completed_subscribers||0} / ${c.target_subscribers}</td><td>${c.points_paid||0}</td><td><button class="btn btn-blue" onclick="stopCampaign(${c.id})">إيقاف</button><button class="btn btn-red" onclick="deleteCampaign(${c.id})">حذف</button></td></tr>`).join('')}</table></div>`;
     }
     if (completedEl) {
       if (!completed.length) completedEl.innerHTML = '<div class="empty">لا توجد حملات مكتملة</div>';
-      else completedEl.innerHTML = `<div class="table-wrap"><table><tr><th>#</th><th>الاسم</th><th>القناة</th><th>حالة</th></tr>${completed.map(c=>`<tr><td>${c.id}</td><td>${c.title||c.name||'-'}</td><td>${c.channel_name||c.channel_username||'-'}</td><td>مكتملة</td></tr>`).join('')}</table></div>`;
+      else completedEl.innerHTML = `<div class="table-wrap"><table><tr><th>#</th><th>القناة</th><th>المشتركون</th><th>النقاط</th><th>إجراء</th></tr>${completed.map(c=>`<tr><td>${c.id}</td><td>${escapeHtml(c.channel_name||c.channel_username||'-')}</td><td>${c.completed_subscribers||0} / ${c.target_subscribers}</td><td>${c.points_paid||0}</td><td><button class="btn btn-red" onclick="deleteCampaign(${c.id})">حذف</button></td></tr>`).join('')}</table></div>`;
     }
   } catch (err) { console.error('loadCampaigns error', err); if (activeEl) activeEl.innerHTML = '<div class="empty">فشل تحميل الحملات</div>'; if (completedEl) completedEl.innerHTML = '';} 
+}
+
+async function stopCampaign(id) {
+  if (!confirm('هل تريد إيقاف هذه الحملة؟')) return;
+  const r = await apiFetch(`/admin/api/campaigns/${id}/stop`, { method: 'POST' });
+  const body = await readJsonSafe(r);
+  if (!r.ok) { showToast(body?.error || 'فشل إيقاف الحملة'); return; }
+  showToast('تم إيقاف الحملة');
+  loadCampaigns();
+}
+
+async function deleteCampaign(id) {
+  if (!confirm('سيتم حذف الحملة واشتراكاتها. هل تريد المتابعة؟')) return;
+  const r = await apiFetch(`/admin/api/campaigns/${id}`, { method: 'DELETE' });
+  const body = await readJsonSafe(r);
+  if (!r.ok) { showToast(body?.error || 'فشل حذف الحملة'); return; }
+  showToast('تم حذف الحملة');
+  loadCampaigns();
 }
 
 // ===== المستخدمون =====
@@ -352,7 +435,7 @@ async function loadUsers() {
     if (!r.ok) { const body = await readJsonSafe(r); el.innerHTML = `<div class="empty">خطأ: ${body && body.error ? body.error : 'فشل تحميل المستخدمين'}</div>`; return; }
     const users = await r.json();
     if (!users || !users.length) { el.innerHTML = '<div class="empty">لا يوجد مستخدمون</div>'; return; }
-    el.innerHTML = `<div class="table-wrap"><table><tr><th>#</th><th>المعرّف</th><th>اسم</th><th>نقاط</th></tr>${users.map(u=>`<tr><td>${u.id}</td><td>${u.username||u.telegram_id||'-'}</td><td>${u.name||'-'}</td><td>${u.points||0}</td></tr>`).join('')}</table></div>`;
+    el.innerHTML = `<div class="table-wrap"><table><tr><th>#</th><th>المعرّف</th><th>اسم</th><th>نقاط</th><th>إجراء</th></tr>${users.map(u=>`<tr><td>${u.id}</td><td>${escapeHtml(u.username ? '@'+u.username : u.telegram_id||'-')}</td><td>${escapeHtml([u.first_name,u.last_name].filter(Boolean).join(' ')||'-')}</td><td>${u.points||0}</td><td><button class="btn btn-blue" onclick="editUserPoints(${u.id}, ${u.points||0})">تعديل</button></td></tr>`).join('')}</table></div>`;
     usersData = users;
   } catch (err) { console.error('loadUsers error', err); el.innerHTML = '<div class="empty">فشل تحميل المستخدمين</div>'; }
 }
@@ -360,7 +443,19 @@ async function loadUsers() {
 function filterUsers(q) {
   q = (q||'').toLowerCase(); const el = document.getElementById('users-body'); if (!el) return; if (!usersData || !usersData.length) return; const filtered = usersData.filter(u=>((u.username||'').toLowerCase().includes(q) || (u.name||'').toLowerCase().includes(q)));
   if (!filtered.length) { el.innerHTML = '<div class="empty">لا توجد نتائج</div>'; return; }
-  el.innerHTML = `<div class="table-wrap"><table><tr><th>#</th><th>المعرّف</th><th>اسم</th><th>نقاط</th></tr>${filtered.map(u=>`<tr><td>${u.id}</td><td>${u.username||u.telegram_id||'-'}</td><td>${u.name||'-'}</td><td>${u.points||0}</td></tr>`).join('')}</table></div>`;
+  el.innerHTML = `<div class="table-wrap"><table><tr><th>#</th><th>المعرّف</th><th>اسم</th><th>نقاط</th><th>إجراء</th></tr>${filtered.map(u=>`<tr><td>${u.id}</td><td>${escapeHtml(u.username ? '@'+u.username : u.telegram_id||'-')}</td><td>${escapeHtml([u.first_name,u.last_name].filter(Boolean).join(' ')||'-')}</td><td>${u.points||0}</td><td><button class="btn btn-blue" onclick="editUserPoints(${u.id}, ${u.points||0})">تعديل</button></td></tr>`).join('')}</table></div>`;
+}
+
+async function editUserPoints(id, current) {
+  const value = prompt('أدخل الرصيد الجديد:', String(current));
+  if (value === null) return;
+  const points = Number(value);
+  if (!Number.isInteger(points) || points < 0) { showToast('قيمة النقاط غير صحيحة'); return; }
+  const r = await apiFetch(`/admin/api/users/${id}/points`, { method: 'PATCH', body: JSON.stringify({ points }) });
+  const body = await readJsonSafe(r);
+  if (!r.ok) { showToast(body?.error || 'فشل تحديث الرصيد'); return; }
+  showToast('تم تحديث رصيد المستخدم');
+  loadUsers();
 }
 
 // ===== التسعير =====
@@ -371,9 +466,37 @@ async function loadPricing() {
     if (!r.ok) { const body = await readJsonSafe(r); el.innerHTML = `<div class="empty">خطأ: ${body && body.error ? body.error : 'فشل تحميل إعدادات التسعير'}</div>`; return; }
     const pricing = await r.json();
     if (!pricing) { el.innerHTML = '<div class="empty">لا توجد إعدادات</div>'; return; }
-    // simple render: show JSON if shape unknown
-    el.innerHTML = `<div class="section"><pre style="white-space:pre-wrap;color:var(--muted)">${JSON.stringify(pricing,null,2)}</pre></div>`;
+    pricingData = pricing;
+    const tiers = Array.isArray(pricing.tiers) ? pricing.tiers : [];
+    el.innerHTML = `<div class="section">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+        <label>النقاط لكل عضو <input id="points-per-member" class="search-bar" type="number" min="1" value="${pricing.pointsPerMember||1}" style="width:120px"></label>
+      </div>
+      <div id="pricing-tiers">${tiers.map((tier, index) => `<div class="pricing-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0">
+        <label>المشتركون <input class="search-bar tier-subs" type="number" min="1" value="${tier.subscribers}" data-index="${index}"></label>
+        <label>النقاط <input class="search-bar tier-points" type="number" min="1" value="${tier.points}" data-index="${index}"></label>
+      </div>`).join('')}</div>
+      <button class="btn btn-green" onclick="savePricing()">حفظ الإعدادات</button>
+    </div>`;
   } catch (err) { console.error('loadPricing error', err); el.innerHTML = '<div class="empty">فشل تحميل إعدادات التسعير</div>'; }
+}
+
+async function savePricing() {
+  const rows = [...document.querySelectorAll('.pricing-row')];
+  const tiers = rows.map(row => ({
+    subscribers: Number(row.querySelector('.tier-subs')?.value),
+    points: Number(row.querySelector('.tier-points')?.value)
+  }));
+  const pointsPerMember = Number(document.getElementById('points-per-member')?.value);
+  if (!Number.isInteger(pointsPerMember) || pointsPerMember < 1 || tiers.some(t => !Number.isInteger(t.subscribers) || t.subscribers < 1 || !Number.isInteger(t.points) || t.points < 1)) {
+    showToast('تحقق من قيم التسعير');
+    return;
+  }
+  const r = await apiFetch('/admin/api/pricing', { method: 'PUT', body: JSON.stringify({ pointsPerMember, tiers }) });
+  const body = await readJsonSafe(r);
+  if (!r.ok) { showToast(body?.error || 'فشل حفظ التسعير'); return; }
+  showToast('تم حفظ إعدادات التسعير');
+  pricingData = body;
 }
 
 </script>

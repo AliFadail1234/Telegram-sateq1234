@@ -135,7 +135,7 @@ export async function deductPoints(userId: number, points: number): Promise<bool
     'UPDATE users SET points = points - $1 WHERE id = $2 AND points >= $1',
     [points, userId],
   );
-  return rowCount > 0;
+  return (rowCount ?? 0) > 0;
 }
 
 export async function getUsersCount(): Promise<number> {

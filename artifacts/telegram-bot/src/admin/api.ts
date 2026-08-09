@@ -135,7 +135,8 @@ function json(req: IncomingMessage, res: ServerResponse, status: number, body: u
 }
 
 export async function handleAdminRequest(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
-  const url = req.url ?? '/';
+  const requestUrl = new URL(req.url ?? '/', 'http://localhost');
+  const url = requestUrl.pathname;
   const method = req.method ?? 'GET';
 
   if (isRateLimited(req)) {
@@ -182,7 +183,7 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
   if (!url.startsWith('/admin/api/')) return false;
 
   if (!isAuthorized(req)) {
-    json(req, res, 401, { error: 'ط؛ظٹط± ظ…طµط±ط­' });
+    json(req, res, 401, { error: 'غير مصرح' });
     return true;
   }
 
@@ -223,12 +224,12 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
     const rawTiers = body['tiers'];
 
     if (!Number.isInteger(pointsPerMember) || pointsPerMember < 1) {
-      json(req, res, 400, { error: 'ظ‚ظٹظ…ط© ظ†ظ‚ط§ط· ظ„ظƒظ„ ط¹ط¶ظˆ ط؛ظٹط± طµط­ظٹط­ط©' });
+      json(req, res, 400, { error: 'قيمة النقاط لكل عضو غير صحيحة' });
       return true;
     }
 
     if (!Array.isArray(rawTiers) || rawTiers.length === 0 || rawTiers.length > 20) {
-      json(req, res, 400, { error: 'ظٹط¬ط¨ ط¥ط¯ط®ط§ظ„ ط¬ط¯ظˆظ„ طھط³ط¹ظٹط± ظˆط§ط­ط¯ ط¹ظ„ظ‰ ط§ظ„ط£ظ‚ظ„' });
+      json(req, res, 400, { error: 'يجب إدخال جدول تسعير واحد على الأقل' });
       return true;
     }
 
@@ -236,7 +237,7 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
     const tiers = [];
     for (const rawTier of rawTiers) {
       if (!rawTier || typeof rawTier !== 'object') {
-        json(req, res, 400, { error: 'ط¨ظٹط§ظ†ط§طھ ط¬ط¯ظˆظ„ ط§ظ„طھط³ط¹ظٹط± ط؛ظٹط± طµط­ظٹط­ط©' });
+        json(req, res, 400, { error: 'بيانات جدول التسعير غير صحيحة' });
         return true;
       }
 
