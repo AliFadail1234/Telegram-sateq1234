@@ -309,6 +309,35 @@ export async function incrementReferralCount(referrerId: number): Promise<void> 
   await pool.query('UPDATE users SET referral_count = referral_count + 1 WHERE id = $1', [referrerId]);
 }
 
+export async function recordReferral(referrerId: number, referredId: number, rewardPoints: number): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // ربط المُحال بالمُحيل (فقط إذا لم يكن لديه محيل بالفعل)
+    const updateReferred = await client.query(
+      'UPDATE users SET referrer_id = $1 WHERE id = $2 AND referrer_id IS NULL',
+      [referrerId, referredId],
+    );
+    if ((updateReferred.rowCount ?? 0) === 0) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+    // زيادة عداد الدعوات وإضافة النقاط للمُحيل
+    await client.query(
+      'UPDATE users SET referral_count = referral_count + 1, points = points + $1 WHERE id = $2',
+      [rewardPoints, referrerId],
+    );
+    await client.query('COMMIT');
+    await addTransaction(referrerId, 'referral', rewardPoints, 'مكافأة دعوة مستخدم جديد', referredId);
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ========== قنوات الأدمن ==========
 
 export async function getActiveChannels(): Promise<Channel[]> {

@@ -5,6 +5,7 @@ import { handleBalance } from './balance.js';
 import { handleAccount } from './account.js';
 import { handleTasks, handleEarnTasks, handleCheckChannel, handleCheckCampaign, handleSkipChannel, handleSkipCampaign } from './tasks.js';
 import { handleDailyBonus } from './daily.js';
+import { handleReferral } from './referral.js';
 import {
   handlePromote,
   handlePromoteChannelInput,
@@ -57,6 +58,7 @@ export function setupHandlers(bot: Telegraf): void {
   bot.hears('⭐ كسب نقاط', handleTasks);
   bot.hears('📢 ترويج قناتي', handlePromote);
   bot.hears('👤 حسابي', handleAccount);
+  bot.hears('🎁 دعوة الأصدقاء', handleReferral);
 
   // ========== Callback queries ==========
 
