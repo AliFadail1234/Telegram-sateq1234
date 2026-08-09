@@ -31,7 +31,9 @@ const DASHBOARD_HTML = path.join(__dirname, 'dashboard.html');
 const DASHBOARD_HTML_FALLBACK = path.join(__dirname, '../src/admin/dashboard.html');
 
 function getAdminPassword(): string | undefined {
-  return process.env.ADMIN_PASSWORD ?? (process.env.NODE_ENV === 'production' ? undefined : 'admin');
+  const raw = process.env.ADMIN_PASSWORD;
+  if (raw !== undefined) return raw.trim();
+  return process.env.NODE_ENV === 'production' ? undefined : 'admin';
 }
 const MAX_BODY_SIZE = 2 * 1024 * 1024;
 const ADMIN_RATE_LIMIT_WINDOW_MS = 60_000;
@@ -152,6 +154,22 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
   }
 
   if (!url.startsWith('/admin/api/')) return false;
+
+  // ===== تشخيص (بدون مصادقة) =====
+  if (url === '/admin/api/ping' && method === 'GET') {
+    const pw = getAdminPassword();
+    const auth = String(req.headers['authorization'] ?? '');
+    const provided = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    json(req, res, 200, {
+      ok: true,
+      passwordSet: !!pw,
+      passwordLength: pw?.length ?? 0,
+      providedLength: provided.length,
+      match: pw ? safeCompare(provided, pw) : false,
+      nodeEnv: process.env.NODE_ENV ?? 'undefined',
+    });
+    return true;
+  }
 
   if (!isAuthorized(req)) { json(req, res, 401, { error: 'غير مصرح' }); return true; }
 
