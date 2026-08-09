@@ -402,25 +402,44 @@ tr:hover td { background:rgba(255,255,255,.02); }
         </div>
       </div>
 
-      <!-- ===== الاشتراك الإجباري ===== -->
+      <!-- ===== القنوات الإجبارية ===== -->
       <div class="form-card" style="border:1px solid var(--yellow);margin-bottom:20px">
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">🔒 قناة الاشتراك الإجباري</div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:14px">عند ضبط هذه القناة، لن يتمكن أي مستخدم من استخدام البوت قبل الاشتراك فيها.</p>
-        <div class="form-row" style="flex-wrap:wrap;gap:12px;margin-bottom:14px">
-          <div class="form-group-inline" style="flex:2;min-width:180px">
-            <label>معرّف القناة</label>
-            <input id="mandatory-channel-username" type="text" placeholder="@channel أو اتركه فارغاً للإلغاء">
-          </div>
-          <div class="form-group-inline" style="flex:0 0 auto;align-self:flex-end">
-            <button class="btn btn-yellow" onclick="saveMandatoryChannel()" style="background:var(--yellow);color:#000">💾 حفظ</button>
-            <button class="btn btn-red btn-sm" onclick="clearMandatoryChannel()" style="margin-right:6px">🗑️ إلغاء الإجبارية</button>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">🔒 القنوات الإجبارية</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px">المستخدم يجب أن يكون مشتركاً في <b>جميع</b> القنوات النشطة قبل استخدام البوت. عند الوصول للحد الأقصى تُوقف القناة تلقائياً.</p>
+
+        <!-- نموذج إضافة قناة -->
+        <div id="mandatory-add-form" style="background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:14px">
+          <div style="font-size:12px;font-weight:600;margin-bottom:10px">➕ إضافة قناة إجبارية</div>
+          <div class="form-row" style="gap:10px;flex-wrap:wrap">
+            <div class="form-group-inline" style="flex:2;min-width:130px">
+              <label>معرّف القناة</label>
+              <input id="mndt-username" type="text" placeholder="@channel">
+            </div>
+            <div class="form-group-inline" style="flex:2;min-width:130px">
+              <label>اسم القناة (اختياري)</label>
+              <input id="mndt-name" type="text" placeholder="قناة الأخبار">
+            </div>
+            <div class="form-group-inline" style="flex:1;min-width:100px">
+              <label>الحد الأقصى للانضمام</label>
+              <input id="mndt-max" type="number" min="1" placeholder="∞ بلا حد">
+            </div>
+            <div class="form-group-inline" style="flex:0 0 auto;align-self:flex-end">
+              <button class="btn btn-green" onclick="addMandatoryChannel()">➕ إضافة</button>
+            </div>
           </div>
         </div>
-        <div style="font-size:12px;font-weight:600;margin-bottom:6px">رسالة الاشتراك الإجباري</div>
-        <p style="font-size:11px;color:var(--muted);margin-bottom:8px">متغيرات: <code style="color:var(--accent)">{name}</code> اسم المستخدم &nbsp;|&nbsp; <code style="color:var(--accent)">{channel}</code> معرّف القناة</p>
-        <textarea id="mandatory-channel-msg" rows="3" placeholder="👋 مرحباً {name}!&#10;&#10;يجب الاشتراك في {channel} أولاً لاستخدام البوت."></textarea>
+
+        <!-- جدول القنوات -->
+        <div class="table-wrap" style="margin-bottom:14px"><table>
+          <thead><tr><th>#</th><th>المعرّف</th><th>الاسم</th><th>الانضمامات</th><th>الحد</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+          <tbody id="mandatory-channels-tbody"><tr><td colspan="7" class="empty">جاري التحميل...</td></tr></tbody>
+        </table></div>
+
+        <!-- رسالة الاشتراك الإجباري -->
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">📝 رسالة الاشتراك الإجباري</div>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:8px">متغيرات: <code style="color:var(--accent)">{name}</code> الاسم &nbsp;|&nbsp; <code style="color:var(--accent)">{channel}</code> أول قناة &nbsp;|&nbsp; <code style="color:var(--accent)">{channels}</code> كل القنوات</p>
+        <textarea id="mandatory-channel-msg" rows="3" placeholder="🔒 يجب الاشتراك في القنوات التالية:&#10;&#10;{channels}&#10;&#10;اشترك ثم اضغط ✅ تحقق."></textarea>
         <button class="btn btn-green btn-sm" style="margin-top:8px" onclick="saveMsg('mandatory_channel_msg','mandatory-channel-msg')">💾 حفظ الرسالة</button>
-        <div id="mandatory-channel-status" style="margin-top:10px;font-size:12px;color:var(--muted)">جاري التحميل...</div>
       </div>
 
       <div class="table-card">
@@ -1183,33 +1202,88 @@ function closeModal(e) {
 
 // ===== المهام =====
 async function loadMandatoryChannel() {
+  // تحميل الرسالة المخصصة
   const settings = await apiJson('/settings');
-  if (!settings) return;
-  const ch = settings.mandatory_channel || '';
-  const msgEl = document.getElementById('mandatory-channel-msg');
-  const statusEl = document.getElementById('mandatory-channel-status');
-  document.getElementById('mandatory-channel-username').value = ch;
-  if (msgEl && settings.mandatory_channel_msg) msgEl.value = settings.mandatory_channel_msg;
-  if (statusEl) {
-    statusEl.textContent = ch
-      ? `✅ قناة إجبارية نشطة: @${ch.replace('@','')}`
-      : '⚪ لا توجد قناة إجبارية حالياً.';
-    statusEl.style.color = ch ? 'var(--green)' : 'var(--muted)';
+  if (settings && settings.mandatory_channel_msg) {
+    const el = document.getElementById('mandatory-channel-msg');
+    if (el) el.value = settings.mandatory_channel_msg;
   }
+  await loadMandatoryChannels();
 }
 
-async function saveMandatoryChannel() {
-  const val = document.getElementById('mandatory-channel-username').value.trim().replace(/^https?:\/\/t\.me\//,'');
-  const r = await api('/settings', { method: 'PUT', body: JSON.stringify({ mandatory_channel: val }) });
-  if (r && r.ok) { showToast(val ? `✅ تم ضبط @${val.replace('@','')} كقناة إجبارية` : '✅ تم الحفظ'); loadMandatoryChannel(); }
-  else showToast('فشل الحفظ', 'error');
+async function loadMandatoryChannels() {
+  const data = await apiJson('/mandatory-channels');
+  const tbody = document.getElementById('mandatory-channels-tbody');
+  if (!tbody) return;
+  if (!data || !data.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">لا توجد قنوات إجبارية — أضف قناة من النموذج أعلاه</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map((ch, i) => {
+    const tag = ch.channel_username.startsWith('@') ? ch.channel_username : '@' + ch.channel_username;
+    const maxLabel = ch.max_joins ? formatNum(ch.max_joins) : '∞';
+    const progress = ch.max_joins ? `${formatNum(ch.current_joins)} / ${maxLabel}` : formatNum(ch.current_joins);
+    const pct = ch.max_joins ? Math.min(100, Math.round(ch.current_joins / ch.max_joins * 100)) : 0;
+    const statusBadge = ch.is_active
+      ? `<span class="badge badge-green">نشط</span>`
+      : `<span class="badge badge-red">موقوف</span>`;
+    return `<tr>
+      <td>${i+1}</td>
+      <td><b style="color:var(--cyan)">${escapeHtml(tag)}</b></td>
+      <td style="font-size:12px">${escapeHtml(ch.channel_name || '—')}</td>
+      <td>
+        <span title="${progress}">${formatNum(ch.current_joins)}</span>
+        ${ch.max_joins ? `<div style="height:4px;background:var(--border);border-radius:2px;margin-top:4px;width:60px"><div style="height:100%;background:${pct>=100?'var(--red)':'var(--accent)'};border-radius:2px;width:${pct}%"></div></div>` : ''}
+      </td>
+      <td style="font-size:12px">${maxLabel}</td>
+      <td>${statusBadge}</td>
+      <td>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn btn-${ch.is_active?'gray':'green'} btn-sm" onclick="toggleMandatoryChannel(${ch.id},${!ch.is_active})" title="${ch.is_active?'إيقاف':'تفعيل'}">${ch.is_active?'⏸':'▶'}</button>
+          <button class="btn btn-blue btn-sm" onclick="editMandatoryChannel(${ch.id},'${escapeHtml(ch.channel_name||'')}',${ch.max_joins||'null'})" title="تعديل">✏️</button>
+          <button class="btn btn-red btn-sm" onclick="deleteMandatoryChannelRow(${ch.id})" title="حذف">🗑️</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
 }
 
-async function clearMandatoryChannel() {
-  if (!confirm('إلغاء الاشتراك الإجباري؟ سيتمكن الجميع من استخدام البوت بدون شرط.')) return;
-  const r = await api('/settings', { method: 'PUT', body: JSON.stringify({ mandatory_channel: '' }) });
-  if (r && r.ok) { document.getElementById('mandatory-channel-username').value = ''; showToast('✅ تم إلغاء الاشتراك الإجباري'); loadMandatoryChannel(); }
+async function addMandatoryChannel() {
+  const username = document.getElementById('mndt-username').value.trim().replace(/^https?:\/\/t\.me\//,'');
+  const name = document.getElementById('mndt-name').value.trim();
+  const maxVal = document.getElementById('mndt-max').value;
+  const max_joins = maxVal ? parseInt(maxVal, 10) : null;
+  if (!username) { showToast('أدخل معرّف القناة', 'error'); return; }
+  const r = await api('/mandatory-channels', { method: 'POST', body: JSON.stringify({ channel_username: username, channel_name: name, max_joins }) });
+  if (r && r.id) {
+    showToast('✅ تمت الإضافة');
+    document.getElementById('mndt-username').value = '';
+    document.getElementById('mndt-name').value = '';
+    document.getElementById('mndt-max').value = '';
+    loadMandatoryChannels();
+  } else showToast('فشل الإضافة', 'error');
+}
+
+async function toggleMandatoryChannel(id, activate) {
+  const r = await api(`/mandatory-channels/${id}`, { method: 'PATCH', body: JSON.stringify({ is_active: activate }) });
+  if (r && r.ok) { showToast(activate ? '✅ تم التفعيل' : '⏸ تم الإيقاف'); loadMandatoryChannels(); }
   else showToast('فشل', 'error');
+}
+
+async function editMandatoryChannel(id, currentName, currentMax) {
+  const name = prompt('اسم القناة:', currentName || '') ?? currentName;
+  const maxStr = prompt('الحد الأقصى للانضمام (0 أو فارغ = بلا حد):', currentMax || '');
+  const max_joins = maxStr !== null ? (parseInt(maxStr, 10) || null) : currentMax;
+  const r = await api(`/mandatory-channels/${id}`, { method: 'PATCH', body: JSON.stringify({ channel_name: name, max_joins }) });
+  if (r && r.ok) { showToast('✅ تم التعديل'); loadMandatoryChannels(); }
+  else showToast('فشل', 'error');
+}
+
+async function deleteMandatoryChannelRow(id) {
+  if (!confirm('حذف هذه القناة الإجبارية؟')) return;
+  const r = await api(`/mandatory-channels/${id}`, { method: 'DELETE' });
+  if (r && r.ok) { showToast('تم الحذف'); loadMandatoryChannels(); }
+  else showToast('فشل الحذف', 'error');
 }
 
 async function loadTasks() {

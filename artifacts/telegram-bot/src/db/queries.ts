@@ -800,6 +800,63 @@ export async function getAllSettings(): Promise<Record<string, string>> {
   return Object.fromEntries(rows.map(r => [r.key, r.value]));
 }
 
+// ========== القنوات الإجبارية ==========
+
+export interface MandatoryChannel {
+  id: number;
+  channel_username: string;
+  channel_name: string;
+  max_joins: number | null;
+  current_joins: number;
+  is_active: number;
+  created_at: string;
+}
+
+export async function getMandatoryChannels(): Promise<MandatoryChannel[]> {
+  const { rows } = await pool.query('SELECT * FROM mandatory_channels ORDER BY created_at ASC');
+  return rows as MandatoryChannel[];
+}
+
+export async function getActiveMandatoryChannels(): Promise<MandatoryChannel[]> {
+  const { rows } = await pool.query('SELECT * FROM mandatory_channels WHERE is_active = 1 ORDER BY created_at ASC');
+  return rows as MandatoryChannel[];
+}
+
+export async function addMandatoryChannel(channelUsername: string, channelName: string, maxJoins: number | null): Promise<MandatoryChannel> {
+  const { rows } = await pool.query(
+    'INSERT INTO mandatory_channels (channel_username, channel_name, max_joins) VALUES ($1, $2, $3) RETURNING *',
+    [channelUsername, channelName, maxJoins],
+  );
+  return rows[0] as MandatoryChannel;
+}
+
+export async function updateMandatoryChannel(id: number, channelName: string, maxJoins: number | null): Promise<void> {
+  await pool.query('UPDATE mandatory_channels SET channel_name=$1, max_joins=$2 WHERE id=$3', [channelName, maxJoins, id]);
+}
+
+export async function toggleMandatoryChannel(id: number, isActive: boolean): Promise<void> {
+  await pool.query('UPDATE mandatory_channels SET is_active=$1 WHERE id=$2', [isActive ? 1 : 0, id]);
+}
+
+export async function deleteMandatoryChannel(id: number): Promise<void> {
+  await pool.query('DELETE FROM mandatory_channels WHERE id=$1', [id]);
+}
+
+/** يسجّل انضمام مستخدم لقناة إجبارية، ويُعيد true إذا وصلت للحد الأقصى وجب إيقافها */
+export async function recordMandatoryJoin(channelId: number): Promise<boolean> {
+  const { rows } = await pool.query(
+    'UPDATE mandatory_channels SET current_joins = current_joins + 1 WHERE id=$1 RETURNING current_joins, max_joins',
+    [channelId],
+  );
+  if (!rows[0]) return false;
+  const { current_joins, max_joins } = rows[0];
+  if (max_joins && current_joins >= max_joins) {
+    await pool.query('UPDATE mandatory_channels SET is_active = 0 WHERE id=$1', [channelId]);
+    return true; // وصلت للحد
+  }
+  return false;
+}
+
 // ========== الهدايا ==========
 
 export interface PointGift {

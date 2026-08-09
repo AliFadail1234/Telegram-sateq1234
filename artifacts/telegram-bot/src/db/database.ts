@@ -80,6 +80,19 @@ export async function initDatabase(): Promise<void> {
     );
   `);
 
+  // ===== جدول القنوات الإجبارية =====
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS mandatory_channels (
+      id               SERIAL PRIMARY KEY,
+      channel_username TEXT NOT NULL,
+      channel_name     TEXT NOT NULL DEFAULT '',
+      max_joins        INTEGER,
+      current_joins    INTEGER NOT NULL DEFAULT 0,
+      is_active        SMALLINT NOT NULL DEFAULT 1,
+      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
   // ===== جداول الهدايا والدعوات المعلقة =====
   await pool.query(`
     CREATE TABLE IF NOT EXISTS point_gifts (

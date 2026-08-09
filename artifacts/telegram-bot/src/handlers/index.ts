@@ -2,7 +2,7 @@ import type { Telegraf } from 'telegraf';
 import type { Context } from 'telegraf';
 import { handleStart } from './start.js';
 import { handleBuyPoints } from './buy_points.js';
-import { checkMandatoryChannel } from './mandatory.js';
+import { checkMandatoryChannel, verifyMandatoryChannels } from './mandatory.js';
 import { handleBalance } from './balance.js';
 import { handleAccount } from './account.js';
 import { handleTasks, handleEarnTasks, handleCheckChannel, handleCheckCampaign, handleSkipChannel, handleSkipCampaign } from './tasks.js';
@@ -179,13 +179,15 @@ export function setupHandlers(bot: Telegraf): void {
 
     // زر التحقق من الاشتراك الإجباري
     if (data === 'mandatory_verify') {
-      const allowed = await checkMandatoryChannel(ctx);
-      if (allowed) {
+      const from = ctx.from;
+      if (!from) return;
+      const result = await verifyMandatoryChannels(ctx, from.id);
+      if (result === 'ok') {
         await ctx.answerCbQuery('✅ تم التحقق! يمكنك استخدام البوت الآن.', { show_alert: true });
-        try { await ctx.deleteMessage(); } catch { /* تجاهل إذا لم يكن بالإمكان */ }
+        try { await ctx.deleteMessage(); } catch { /* تجاهل */ }
         await ctx.reply('اختر من القائمة:', mainMenuKeyboard);
       } else {
-        await ctx.answerCbQuery('❌ لم يتم التحقق من اشتراكك، اشترك أولاً.', { show_alert: true });
+        await ctx.answerCbQuery('❌ لم يتم التحقق من اشتراكك في جميع القنوات.', { show_alert: true });
       }
       return;
     }

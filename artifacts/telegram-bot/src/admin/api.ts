@@ -19,6 +19,8 @@ import {
   getBroadcasts, saveBroadcast,
   getAllSettings, setSetting,
   getGifts, createGift, deleteGift, deactivateGift,
+  getMandatoryChannels, addMandatoryChannel, updateMandatoryChannel,
+  toggleMandatoryChannel, deleteMandatoryChannel,
 } from '../db/queries.js';
 import {
   getActivePricingTiers,
@@ -545,6 +547,45 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
       await deactivateGift(parseInt(giftIdMatch[1]!, 10));
       json(req, res, 200, { ok: true });
       return true;
+    }
+
+    // ===== القنوات الإجبارية =====
+    if (apiPath === '/mandatory-channels' && method === 'GET') {
+      json(req, res, 200, await getMandatoryChannels());
+      return true;
+    }
+
+    if (apiPath === '/mandatory-channels' && method === 'POST') {
+      const body = await readBody(req);
+      const username = String(body['channel_username'] ?? '').trim().replace(/^https?:\/\/t\.me\//, '');
+      const chName = String(body['channel_name'] ?? '').trim();
+      const maxJoins = body['max_joins'] ? parseInt(String(body['max_joins']), 10) : null;
+      if (!username) { json(req, res, 400, { error: 'أدخل معرّف القناة' }); return true; }
+      const ch = await addMandatoryChannel(username, chName || username, maxJoins && maxJoins > 0 ? maxJoins : null);
+      json(req, res, 201, ch);
+      return true;
+    }
+
+    const mandatoryIdMatch = apiPath.match(/^\/mandatory-channels\/(\d+)$/);
+    if (mandatoryIdMatch) {
+      const id = parseInt(mandatoryIdMatch[1]!, 10);
+      if (method === 'DELETE') {
+        await deleteMandatoryChannel(id);
+        json(req, res, 200, { ok: true });
+        return true;
+      }
+      if (method === 'PATCH') {
+        const body = await readBody(req);
+        if ('is_active' in body) {
+          await toggleMandatoryChannel(id, !!body['is_active']);
+        } else {
+          const chName = String(body['channel_name'] ?? '').trim();
+          const maxJoins = body['max_joins'] != null && body['max_joins'] !== '' ? parseInt(String(body['max_joins']), 10) : null;
+          await updateMandatoryChannel(id, chName, maxJoins && maxJoins > 0 ? maxJoins : null);
+        }
+        json(req, res, 200, { ok: true });
+        return true;
+      }
     }
 
     json(req, res, 404, { error: 'مسار غير موجود' });
