@@ -212,15 +212,27 @@ tr:hover td { background:rgba(255,255,255,.02); }
 
 /* ===== MOBILE ===== */
 #hamburger { display:none; position:fixed; top:16px; right:16px; z-index:200; background:var(--accent); border:none; border-radius:var(--radius-sm); padding:8px 12px; color:#fff; cursor:pointer; font-size:18px; }
+/* overlay لإغلاق الشريط الجانبي */
+#sidebar-overlay {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+  z-index:149; -webkit-tap-highlight-color:transparent;
+}
+#sidebar-overlay.visible { display:block; }
+
 @media (max-width:768px) {
   #hamburger { display:flex; }
-  #sidebar { transform:translateX(100%); }
+  #sidebar { transform:translateX(100%); transition:transform .25s ease; }
   #sidebar.open { transform:translateX(0); }
   #main { margin-right:0; }
   .cards-grid { grid-template-columns:repeat(2,1fr); }
   .two-col, .three-col { grid-template-columns:1fr; }
   .user-profile { grid-template-columns:1fr; }
   .section { padding:16px; padding-top:60px; }
+  /* إصلاح اقتطاع Labels في الإعدادات على الموبايل */
+  .form-group-inline label { white-space:normal; overflow:visible; text-overflow:unset; }
+  .form-row { flex-direction:column; }
+  .form-row .form-group-inline { flex:1 1 100% !important; min-width:0; }
+  .settings-section { font-size:13px; }
 }
 </style>
 </head>
@@ -228,6 +240,8 @@ tr:hover td { background:rgba(255,255,255,.02); }
 
 <!-- زر الهامبرغر للموبايل -->
 <button id="hamburger" onclick="toggleSidebar()">☰</button>
+<!-- طبقة إغلاق الشريط الجانبي -->
+<div id="sidebar-overlay" onclick="toggleSidebar()"></div>
 
 <!-- شاشة تسجيل الدخول -->
 <div id="login-screen">
@@ -377,6 +391,27 @@ tr:hover td { background:rgba(255,255,255,.02); }
             <button class="btn btn-green" onclick="addChannel()">إضافة</button>
           </div>
         </div>
+      </div>
+
+      <!-- ===== الاشتراك الإجباري ===== -->
+      <div class="form-card" style="border:1px solid var(--yellow);margin-bottom:20px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">🔒 قناة الاشتراك الإجباري</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px">عند ضبط هذه القناة، لن يتمكن أي مستخدم من استخدام البوت قبل الاشتراك فيها.</p>
+        <div class="form-row" style="flex-wrap:wrap;gap:12px;margin-bottom:14px">
+          <div class="form-group-inline" style="flex:2;min-width:180px">
+            <label>معرّف القناة</label>
+            <input id="mandatory-channel-username" type="text" placeholder="@channel أو اتركه فارغاً للإلغاء">
+          </div>
+          <div class="form-group-inline" style="flex:0 0 auto;align-self:flex-end">
+            <button class="btn btn-yellow" onclick="saveMandatoryChannel()" style="background:var(--yellow);color:#000">💾 حفظ</button>
+            <button class="btn btn-red btn-sm" onclick="clearMandatoryChannel()" style="margin-right:6px">🗑️ إلغاء الإجبارية</button>
+          </div>
+        </div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">رسالة الاشتراك الإجباري</div>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:8px">متغيرات: <code style="color:var(--accent)">{name}</code> اسم المستخدم &nbsp;|&nbsp; <code style="color:var(--accent)">{channel}</code> معرّف القناة</p>
+        <textarea id="mandatory-channel-msg" rows="3" placeholder="👋 مرحباً {name}!&#10;&#10;يجب الاشتراك في {channel} أولاً لاستخدام البوت."></textarea>
+        <button class="btn btn-green btn-sm" style="margin-top:8px" onclick="saveMsg('mandatory_channel_msg','mandatory-channel-msg')">💾 حفظ الرسالة</button>
+        <div id="mandatory-channel-status" style="margin-top:10px;font-size:12px;color:var(--muted)">جاري التحميل...</div>
       </div>
 
       <div class="table-card">
@@ -772,7 +807,14 @@ function showToast(msg, type = 'success') {
 }
 
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebar-overlay');
+  sb.classList.toggle('open');
+  ov.classList.toggle('visible', sb.classList.contains('open'));
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
 }
 
 // ===== AUTH =====
@@ -857,7 +899,7 @@ function showSection(name) {
   event.currentTarget && event.currentTarget.classList.add('active');
 
   // إغلاق القائمة في الموبايل
-  document.getElementById('sidebar').classList.remove('open');
+  closeSidebar();
   currentSection = name;
 
   // تحميل البيانات
@@ -1087,7 +1129,38 @@ function closeModal(e) {
 }
 
 // ===== المهام =====
+async function loadMandatoryChannel() {
+  const settings = await apiJson('/settings');
+  if (!settings) return;
+  const ch = settings.mandatory_channel || '';
+  const msgEl = document.getElementById('mandatory-channel-msg');
+  const statusEl = document.getElementById('mandatory-channel-status');
+  document.getElementById('mandatory-channel-username').value = ch;
+  if (msgEl && settings.mandatory_channel_msg) msgEl.value = settings.mandatory_channel_msg;
+  if (statusEl) {
+    statusEl.textContent = ch
+      ? `✅ قناة إجبارية نشطة: @${ch.replace('@','')}`
+      : '⚪ لا توجد قناة إجبارية حالياً.';
+    statusEl.style.color = ch ? 'var(--green)' : 'var(--muted)';
+  }
+}
+
+async function saveMandatoryChannel() {
+  const val = document.getElementById('mandatory-channel-username').value.trim().replace(/^https?:\/\/t\.me\//,'');
+  const r = await api('/settings', { method: 'PUT', body: JSON.stringify({ mandatory_channel: val }) });
+  if (r && r.ok) { showToast(val ? `✅ تم ضبط @${val.replace('@','')} كقناة إجبارية` : '✅ تم الحفظ'); loadMandatoryChannel(); }
+  else showToast('فشل الحفظ', 'error');
+}
+
+async function clearMandatoryChannel() {
+  if (!confirm('إلغاء الاشتراك الإجباري؟ سيتمكن الجميع من استخدام البوت بدون شرط.')) return;
+  const r = await api('/settings', { method: 'PUT', body: JSON.stringify({ mandatory_channel: '' }) });
+  if (r && r.ok) { document.getElementById('mandatory-channel-username').value = ''; showToast('✅ تم إلغاء الاشتراك الإجباري'); loadMandatoryChannel(); }
+  else showToast('فشل', 'error');
+}
+
 async function loadTasks() {
+  loadMandatoryChannel();
   const data = await apiJson('/channels?all=1');
   if (!data) return;
   const tbody = document.getElementById('tasks-tbody');

@@ -2,6 +2,7 @@ import type { Context } from 'telegraf';
 import { getOrCreateUser, getUserByTelegramId, getSetting, recordReferral, getUserById } from '../db/queries.js';
 import { mainMenuKeyboard } from '../utils/keyboards.js';
 import { welcomeMessage } from '../utils/messages.js';
+import { checkMandatoryChannel } from './mandatory.js';
 
 export async function handleStart(ctx: Context): Promise<void> {
   const from = ctx.from;
@@ -42,6 +43,10 @@ export async function handleStart(ctx: Context): Promise<void> {
       }
     }
   }
+
+  // التحقق من الاشتراك الإجباري (المستخدمون الجدد والقدامى)
+  const allowed = await checkMandatoryChannel(ctx);
+  if (!allowed) return;
 
   await ctx.reply(welcomeMessage(user, isNew), mainMenuKeyboard);
 }
