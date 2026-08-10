@@ -13,15 +13,18 @@ export async function handleGiftStart(ctx: Context, giftId: number): Promise<voi
   }
 
   const result = await claimGift(giftId, user.id);
-  const updated = await getUserById(user.id);
 
-  switch (result) {
-    case 'ok':
+  switch (result.status) {
+    case 'ok': {
+      const updated = await getUserById(user.id);
       await ctx.reply(
-        `🎁 مبروك!\n\nتم إضافة نقاط الهدية إلى رصيدك.\n💰 رصيدك الحالي: ${updated?.points ?? user.points} نقطة`,
-        mainMenuKeyboard,
+        `🎁 <b>مبروك! استلمت هديتك</b>\n\n` +
+        `✨ تمت إضافة: <b>${result.points.toLocaleString('ar-EG')} نقطة</b>\n` +
+        `💰 رصيدك الحالي: <b>${(updated?.points ?? user.points).toLocaleString('ar-EG')} نقطة</b>`,
+        { parse_mode: 'HTML', reply_markup: mainMenuKeyboard.reply_markup },
       );
       break;
+    }
     case 'already_claimed':
       await ctx.reply('⚠️ لقد استلمت هذه الهدية مسبقاً.', mainMenuKeyboard);
       break;

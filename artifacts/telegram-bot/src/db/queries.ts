@@ -898,7 +898,13 @@ export async function deleteGift(id: number): Promise<void> {
   await pool.query('DELETE FROM point_gifts WHERE id = $1', [id]);
 }
 
-export async function claimGift(giftId: number, userId: number): Promise<'ok' | 'already_claimed' | 'exhausted' | 'not_found'> {
+export type ClaimGiftResult =
+  | { status: 'ok'; points: number }
+  | { status: 'already_claimed' }
+  | { status: 'exhausted' }
+  | { status: 'not_found' };
+
+export async function claimGift(giftId: number, userId: number): Promise<ClaimGiftResult> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -906,19 +912,17 @@ export async function claimGift(giftId: number, userId: number): Promise<'ok' | 
       'SELECT * FROM point_gifts WHERE id = $1 AND is_active = 1 FOR UPDATE',
       [giftId],
     );
-    if (!rows[0]) { await client.query('ROLLBACK'); return 'not_found'; }
+    if (!rows[0]) { await client.query('ROLLBACK'); return { status: 'not_found' }; }
     const gift = rows[0] as PointGift;
-    if (gift.current_claims >= gift.max_claims) { await client.query('ROLLBACK'); return 'exhausted'; }
-    // تحقق من أن المستخدم لم يطالب بهذه الهدية مسبقاً
+    if (gift.current_claims >= gift.max_claims) { await client.query('ROLLBACK'); return { status: 'exhausted' }; }
     const dup = await client.query('SELECT id FROM gift_claims WHERE gift_id=$1 AND user_id=$2', [giftId, userId]);
-    if (dup.rows.length > 0) { await client.query('ROLLBACK'); return 'already_claimed'; }
-    // سجّل المطالبة وأضف النقاط
+    if (dup.rows.length > 0) { await client.query('ROLLBACK'); return { status: 'already_claimed' }; }
     await client.query('INSERT INTO gift_claims (gift_id, user_id) VALUES ($1, $2)', [giftId, userId]);
     await client.query('UPDATE point_gifts SET current_claims = current_claims + 1 WHERE id = $1', [giftId]);
     await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [gift.points, userId]);
     await client.query('COMMIT');
     await addTransaction(userId, 'gift', gift.points, `هدية نقاط #${giftId}`, giftId);
-    return 'ok';
+    return { status: 'ok', points: gift.points };
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
