@@ -15,6 +15,7 @@ import {
   updateChannelPoints, toggleChannelActive, getChannelCompletionsCount,
   getActiveCampaigns, getCompletedCampaigns,
   stopCampaign, deleteCampaignById,
+  getNextPendingChannel, getNextPendingCampaign, getUserByTelegramId,
   getAdmins, addAdmin, removeAdmin,
   getBroadcasts, saveBroadcast,
   getAllSettings, setSetting,
@@ -438,6 +439,38 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
     if (campaignDeleteMatch && method === 'DELETE') {
       await deleteCampaignById(parseInt(campaignDeleteMatch[1]!, 10));
       json(req, res, 200, { ok: true });
+      return true;
+    }
+
+    // ===== تشخيص المهام لمستخدم =====
+    if (apiPath === '/debug/tasks' && method === 'GET') {
+      const telegramIdStr = getQP(req, 'telegram_id', '');
+      const telegramId = parseInt(telegramIdStr, 10);
+      if (!telegramId || isNaN(telegramId)) {
+        json(req, res, 400, { error: 'أرسل telegram_id صحيح' });
+        return true;
+      }
+      const user = await getUserByTelegramId(telegramId);
+      if (!user) {
+        json(req, res, 404, { error: 'المستخدم غير موجود في قاعدة البيانات — هل أرسل /start؟', telegram_id: telegramId });
+        return true;
+      }
+      const [nextChannel, nextCampaign, activeCampaigns] = await Promise.all([
+        getNextPendingChannel(user.id),
+        getNextPendingCampaign(user.id),
+        getActiveCampaigns(),
+      ]);
+      json(req, res, 200, {
+        user: { id: user.id, telegram_id: user.telegram_id, username: user.username, first_name: user.first_name, points: user.points },
+        tasks: {
+          channel: nextChannel
+            ? { found: true, id: nextChannel.id, name: nextChannel.channel_name, username: nextChannel.channel_username, points: nextChannel.points_reward }
+            : { found: false, reason: 'لا توجد قنوات مهام نشطة لم يُكمله هذا المستخدم' },
+          campaign: nextCampaign
+            ? { found: true, id: nextCampaign.id, channel: nextCampaign.channel_username, completed: nextCampaign.completed_subscribers, target: nextCampaign.target_subscribers }
+            : { found: false, reason: 'لا توجد حملة نشطة لهذا المستخدم (إما مالكها أو اشترك فيها أو اكتملت)', total_active_campaigns: activeCampaigns.length, campaigns_detail: activeCampaigns.map(c => ({ id: c.id, user_id: c.user_id, channel: c.channel_username, status: c.status, completed: c.completed_subscribers, target: c.target_subscribers })) },
+        },
+      });
       return true;
     }
 
