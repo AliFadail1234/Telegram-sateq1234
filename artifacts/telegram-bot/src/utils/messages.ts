@@ -29,7 +29,7 @@ export function channelTaskMessage(channel: Channel): string {
 export function campaignTaskMessage(campaign: Campaign, pointsReward = 1): string {
   const u = campaign.channel_username.startsWith('@') ? campaign.channel_username : `@${campaign.channel_username}`;
   const remaining = campaign.target_subscribers - campaign.completed_subscribers;
-  return `⭐ مهمة — اشتراك في قناة\n\n📢 القناة: ${campaign.channel_name}\n🔗 المعرّف: ${u}\n💰 المكافأة: ${pointsReward} نقطة\n📊 متبقي: ${remaining} مشترك\n\nاشترك ثم اضغط تحقق.`;
+  return `⭐ مهمة — اشتراك في قناة\n\n📢 القناة: ${campaign.channel_name}\n🔗 المعرّف: ${u}\n💰 المكافأة: ${pointsReward} نقطة\n\nاشترك ثم اضغط تحقق.`;
 }
 
 export function noTasksMessage(): string {
