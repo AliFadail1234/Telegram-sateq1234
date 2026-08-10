@@ -1593,6 +1593,18 @@ async function getBotUsername() {
   return _botUsername;
 }
 
+async function ensureBotUsername() {
+  let u = await getBotUsername();
+  if (u) return u;
+  // يطلب من الأدمن الإدخال اليدوي مرة واحدة
+  const input = prompt('🤖 أدخل معرّف البوت (بدون @) لإنشاء الروابط:\nمثال: mybot123');
+  if (!input || !input.trim()) return '';
+  u = input.trim().replace(/^@/, '');
+  await api('/settings', { method: 'PUT', body: JSON.stringify({ bot_username: u }) });
+  _botUsername = u;
+  return u;
+}
+
 async function loadGifts() {
   const data = await apiJson('/gifts');
   const tbody = document.getElementById('gifts-tbody');
@@ -1626,8 +1638,8 @@ async function createGiftLink() {
   if (description) body.description = description;
   const r = await apiJson('/gifts', { method: 'POST', body: JSON.stringify(body) });
   if (!r || !r.id) { showToast('فشل إنشاء الهدية', 'error'); return; }
-  const username = await getBotUsername();
-  if (!username) { showToast('⚠️ لم يُحفظ اسم البوت — أعد تشغيل البوت أولاً', 'error'); return; }
+  const username = await ensureBotUsername();
+  if (!username) { showToast('⚠️ أدخل معرّف البوت لإنشاء الرابط', 'error'); return; }
   const link = `https://t.me/${username}?start=gift_${r.id}`;
   document.getElementById('gift-link-text').textContent = link;
   document.getElementById('gift-result').style.display = 'block';
@@ -1641,8 +1653,9 @@ function copyGiftLink() {
 }
 
 async function copyGiftLinkById(id) {
-  const username = await getBotUsername();
-  const link = `https://t.me/${username || 'BOT_USERNAME'}?start=gift_${id}`;
+  const username = await ensureBotUsername();
+  if (!username) { showToast('⚠️ أدخل معرّف البوت أولاً', 'error'); return; }
+  const link = `https://t.me/${username}?start=gift_${id}`;
   await navigator.clipboard?.writeText(link);
   showToast('تم نسخ الرابط 📋');
 }
