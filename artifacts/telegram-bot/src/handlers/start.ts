@@ -48,12 +48,13 @@ export async function handleStart(ctx: Context): Promise<void> {
         try {
           const updatedReferrer = await getUserById(referrer.id);
           const msgTemplate = await getSetting('referral_notify_msg');
-          const defMsg = `🎉 دعوة ناجحة!\n\nانضم <b>{name}</b> عبر رابطك!\n💰 تم إضافة {points} نقطة لك.\n🏦 رصيدك: {total} نقطة`;
+          const defMsg = `🎉 دعوة ناجحة!\n\nانضم <b>{name}</b> عبر رابطك!\n⏳ ستحصل على <b>{points} نقطة</b> بعد إتمام صديقك المهام المطلوبة.\n🏦 رصيدك الحالي: {total} نقطة`;
           const inviteeName = user.first_name + (user.last_name ? ` ${user.last_name}` : '');
           const text = (msgTemplate || defMsg)
             .replace(/{name}/g, inviteeName)
             .replace(/{points}/g, String(rewardPoints))
-            .replace(/{total}/g, String(updatedReferrer?.points ?? referrer.points + rewardPoints));
+            .replace(/{threshold}/g, String(requiredTasks))
+            .replace(/{total}/g, String(updatedReferrer?.points ?? referrer.points));
           await ctx.telegram.sendMessage(referrer.telegram_id, text, { parse_mode: 'HTML' });
         } catch { /* لا تُفشل /start إذا فشل الإشعار */ }
       }
