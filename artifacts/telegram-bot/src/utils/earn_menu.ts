@@ -34,7 +34,6 @@ export async function showEarnMenu(ctx: Context, editMode: boolean): Promise<voi
 
   const keyboard = {
     inline_keyboard: [
-      [{ text: dailyBtnText, callback_data: 'daily_bonus' }],
       ...(hasAnyTask ? [[{ text: '📋 مهام الاشتراك', callback_data: 'earn_tasks' }]] : []),
     ],
   };
