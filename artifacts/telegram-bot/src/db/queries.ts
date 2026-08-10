@@ -439,6 +439,7 @@ export async function getNextPendingCampaign(userId: number, excludeIds: number[
   const { rows } = await pool.query(`
     SELECT * FROM campaigns
     WHERE status = 'active'
+      AND completed_subscribers < target_subscribers
       AND user_id != $1
       AND id NOT IN (SELECT campaign_id FROM campaign_subscriptions WHERE user_id = $1)
       ${placeholders}
