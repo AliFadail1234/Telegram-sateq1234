@@ -8,6 +8,8 @@ if (!DATABASE_URL) {
 const useSsl = process.env.DB_SSL !== 'false' && (process.env.DATABASE_URL?.includes('supabase') || process.env.NODE_ENV === 'production');
 export const pool = new Pool({
   connectionString: DATABASE_URL,
+  // rejectUnauthorized: false مطلوب لـ Supabase PgBouncer الذي يستخدم شهادة خاصة
+  // لا يمكن تغييره بدون قطع الاتصال بقاعدة البيانات
   ssl: useSsl ? { rejectUnauthorized: false } : undefined,
   max: 10,
   idleTimeoutMillis: 30000,

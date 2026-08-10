@@ -248,7 +248,7 @@ export function setupHandlers(bot: Telegraf): void {
     }
 
     // رسالة غير معروفة
-    const user = getUserByTelegramId(from.id);
+    const user = await getUserByTelegramId(from.id);
     if (!user) { await ctx.reply('👋 أرسل /start للبدء.'); return; }
     await ctx.reply('اختر من القائمة:', mainMenuKeyboard);
   });

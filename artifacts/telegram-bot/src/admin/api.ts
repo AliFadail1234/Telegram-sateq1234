@@ -36,8 +36,10 @@ const DASHBOARD_HTML_FALLBACK = path.join(__dirname, '../src/admin/dashboard.htm
 
 function getAdminPassword(): string | undefined {
   const raw = process.env.ADMIN_PASSWORD?.trim();
-  if (raw) return raw;                          // موجودة وغير فارغة
-  return process.env.NODE_ENV === 'production' ? undefined : 'admin';
+  if (raw) return raw;
+  // لا تقبل طلبات الإدارة بدون كلمة مرور في أي بيئة
+  console.warn('[Admin] ADMIN_PASSWORD غير محدد — لوحة التحكم مغلقة');
+  return undefined;
 }
 const MAX_BODY_SIZE = 2 * 1024 * 1024;
 const ADMIN_RATE_LIMIT_WINDOW_MS = 60_000;
@@ -65,9 +67,18 @@ function isRateLimited(req: IncomingMessage): boolean {
 }
 
 function setCors(req: IncomingMessage, res: ServerResponse): void {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Admin API: رفض الطلبات من أصول خارجية
+  const origin = req.headers['origin'];
+  const host = req.headers['host'] ?? '';
+  if (!origin || origin.includes(host.split(':')[0]!)) {
+    res.setHeader('Access-Control-Allow-Origin', origin ?? '*');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'no-referrer');
 }
 
 function safeCompare(a: string, b: string): boolean {
@@ -159,19 +170,9 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
 
   if (!url.startsWith('/admin/api/')) return false;
 
-  // ===== تشخيص (بدون مصادقة) =====
+  // ===== ping (بدون تسريب معلومات) =====
   if (url === '/admin/api/ping' && method === 'GET') {
-    const pw = getAdminPassword();
-    const auth = String(req.headers['authorization'] ?? '');
-    const provided = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    json(req, res, 200, {
-      ok: true,
-      passwordSet: !!pw,
-      passwordLength: pw?.length ?? 0,
-      providedLength: provided.length,
-      match: pw ? safeCompare(provided, pw) : false,
-      nodeEnv: process.env.NODE_ENV ?? 'undefined',
-    });
+    json(req, res, 200, { ok: true });
     return true;
   }
 
@@ -261,6 +262,7 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
       const body = await readBody(req);
       const message = String(body['message'] ?? '').trim();
       if (!message) { json(req, res, 400, { error: 'الرسالة فارغة' }); return true; }
+      if (message.length > 4096) { json(req, res, 400, { error: 'الرسالة أطول من الحد المسموح (4096 حرف)' }); return true; }
       const user = await getUserById(userId);
       if (!user) { json(req, res, 404, { error: 'المستخدم غير موجود' }); return true; }
       const ok = await sendTelegramMsg(user.telegram_id, message);
@@ -372,8 +374,10 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
       const body = await readBody(req);
       const username = String(body['username'] ?? '').replace(/^@/, '').replace(/^https?:\/\/t\.me\//i, '').trim();
       const points = parseInt(String(body['points'] ?? '0'), 10);
-      const name = String(body['name'] ?? username).trim() || username;
-      if (!username || isNaN(points) || points < 1) { json(req, res, 400, { error: 'أدخل معرّف القناة والنقاط' }); return true; }
+      const name = String(body['name'] ?? username).slice(0, 128).trim() || username;
+      // تحقق: معرّف تيليجرام صالح (5-32 حرف، حروف وأرقام وشرطة سفلية فقط)
+      if (!username || !/^[a-zA-Z0-9_]{5,32}$/.test(username)) { json(req, res, 400, { error: 'معرّف القناة غير صحيح (5-32 حرف، بدون مسافات أو رموز)' }); return true; }
+      if (isNaN(points) || points < 1 || points > 100000) { json(req, res, 400, { error: 'أدخل عدد نقاط صحيح (1-100000)' }); return true; }
       const channel = await createChannel(username, name, points);
       json(req, res, 201, channel);
       return true;
@@ -479,6 +483,7 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
       const body = await readBody(req);
       const message = String(body['message'] ?? '').trim();
       if (!message) { json(req, res, 400, { error: 'الرسالة فارغة' }); return true; }
+      if (message.length > 4096) { json(req, res, 400, { error: 'الرسالة أطول من الحد المسموح (4096 حرف)' }); return true; }
 
       // إرجاع الاستجابة فوراً وإرسال الرسائل في الخلفية
       json(req, res, 202, { ok: true, message: 'جاري الإرسال في الخلفية...' });
@@ -590,10 +595,10 @@ export async function handleAdminRequest(req: IncomingMessage, res: ServerRespon
 
     if (apiPath === '/mandatory-channels' && method === 'POST') {
       const body = await readBody(req);
-      const username = String(body['channel_username'] ?? '').trim().replace(/^https?:\/\/t\.me\//, '');
-      const chName = String(body['channel_name'] ?? '').trim();
+      const username = String(body['channel_username'] ?? '').trim().replace(/^@/, '').replace(/^https?:\/\/t\.me\//, '');
+      const chName = String(body['channel_name'] ?? '').slice(0, 128).trim();
       const maxJoins = body['max_joins'] ? parseInt(String(body['max_joins']), 10) : null;
-      if (!username) { json(req, res, 400, { error: 'أدخل معرّف القناة' }); return true; }
+      if (!username || !/^[a-zA-Z0-9_]{5,32}$/.test(username)) { json(req, res, 400, { error: 'معرّف القناة غير صحيح (5-32 حرف، بدون مسافات أو رموز)' }); return true; }
       const ch = await addMandatoryChannel(username, chName || username, maxJoins && maxJoins > 0 ? maxJoins : null);
       json(req, res, 201, ch);
       return true;
